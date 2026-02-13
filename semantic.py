@@ -4,7 +4,6 @@ symbol_table = {}
 def declare(var, value):
     symbol_table[var] = value
 
-# Function to check semantic correctness
 def semantic_check(expr):
     tokens = expr.split() 
     for token in tokens:
@@ -36,4 +35,5 @@ if semantic_check(expr2):
     print("Expression 2: Semantic OK ✅")
 else:
     print("Expression 2: Semantic Error ❌")
+
 
