@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Prime Lexer — Tokenizer Only</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#0d0f14;--card:#13161e;--card2:#1a1d27;--border:#252836;
+      --accent:#ff9900;--accent2:#ffb84d;--text:#e8eaf0;--muted:#6b7280;
+      --green:#22c55e;--red:#ef4444;--purple:#a78bfa;--orange:#fb923c;--indigo:#818cf8;
+      --pink:#f472b6;--teal:#14b8a6;}
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:20px 16px 40px;}
+    .page{max-width:1100px;margin:0 auto;}
+    header{text-align:center;margin-bottom:24px;}
+    .pill{display:inline-flex;align-items:center;gap:8px;padding:6px 18px;border-radius:999px;
+      background:linear-gradient(90deg,rgba(255,153,0,.15),rgba(255,184,77,.1));
+      border:1px solid rgba(255,153,0,.3);color:var(--accent2);font-family:'Syne',sans-serif;font-weight:800;font-size:12px;letter-spacing:1px;text-transform:uppercase;margin-bottom:12px;}
+    h1{font-family:'Syne',sans-serif;font-size:28px;font-weight:800;
+      background:linear-gradient(135deg,#fff 0%,var(--accent2) 60%,var(--accent) 100%);
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:6px;}
+    .sub{color:var(--muted);font-size:13px;max-width:680px;margin:0 auto;}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;
+      box-shadow:0 20px 60px rgba(0,0,0,.4);margin-bottom:16px;}
+    .card-title{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:1.2px;text-transform:uppercase;margin-bottom:10px;}
+    textarea{width:100%;min-height:260px;padding:14px;border-radius:10px;border:1px solid var(--border);
+      background:#0a0c12;color:#e2e8f0;font-family:'JetBrains Mono',monospace;font-size:12.5px;resize:vertical;outline:none;tab-size:2;line-height:1.65;}
+    textarea:focus{border-color:rgba(255,153,0,.5);box-shadow:0 0 0 3px rgba(255,153,0,.1);}
+    .controls{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;}
+    .btn{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0d0f14;border:none;border-radius:9px;
+      padding:9px 18px;font-weight:700;cursor:pointer;font-size:13px;font-family:'Inter',sans-serif;}
+    .btn-sec{background:rgba(255,153,0,.08);border:1px solid rgba(255,153,0,.25);color:var(--accent2);
+      border-radius:9px;padding:9px 14px;cursor:pointer;font-weight:600;font-size:12.5px;font-family:'Inter',sans-serif;}
+    .btn-clear{background:transparent;border:1px solid var(--border);color:var(--muted);
+      border-radius:9px;padding:9px 14px;cursor:pointer;font-size:12.5px;font-family:'Inter',sans-serif;}
+    .status{color:var(--muted);font-size:12px;flex:1;min-width:80px;}
+    .tw{max-height:420px;overflow:auto;border-radius:8px;border:1px solid var(--border);}
+    .tw::-webkit-scrollbar{width:6px;height:6px;} .tw::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+    table{width:100%;border-collapse:collapse;} thead{position:sticky;top:0;background:#0a0c12;z-index:1;}
+    th,td{padding:7px 10px;font-size:12px;text-align:left;border-bottom:1px solid var(--border);}
+    th{color:var(--muted);text-transform:uppercase;font-weight:700;letter-spacing:.5px;font-size:10.5px;}
+    td.val{font-family:'JetBrains Mono',monospace;color:var(--text);}
+    .empty{text-align:center;color:var(--muted);padding:24px 12px;font-size:13px;}
+    .sbadges{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
+    .badge{padding:3px 8px;border-radius:5px;font-weight:700;font-size:10.5px;font-family:'JetBrains Mono',monospace;}
+    .badge.KEYWORD{color:var(--purple);background:rgba(167,139,250,.12);}
+    .badge.IDENTIFIER{color:var(--accent2);background:rgba(255,184,77,.1);}
+    .badge.INTEGER,.badge.FLOAT{color:var(--green);background:rgba(34,197,94,.1);}
+    .badge.STRING{color:var(--orange);background:rgba(251,146,60,.1);}
+    .badge.OPERATOR{color:var(--indigo);background:rgba(129,140,248,.1);}
+    .badge.DELIMITER{color:var(--pink);background:rgba(244,114,182,.1);}
+    .badge.COMMENT{color:var(--muted);background:rgba(107,114,128,.1);}
+    .badge.PREPROCESSOR{color:var(--teal);background:rgba(20,184,166,.1);}
+    footer{margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;color:var(--muted);font-size:12px;}
+    footer strong{color:var(--text);}
+  </style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div class="pill">⚡ Prime Lexer</div>
+    <h1>Lexer — Tokenize Source Code</h1>
+    <p class="sub">C or Python source → token stream. Parser/semantic/optimizer/ASM removed for a focused lexical analyser.</p>
+  </header>
+
+  <div class="card">
+    <div class="card-title">📝 Source Code</div>
+    <textarea id="code" spellcheck="false">#include &lt;stdio.h&gt;
+
+int main() {
+  int x = 2 + 3;
+  printf("x = %d", x);
+  return 0;
+}</textarea>
+    <div class="controls">
+      <button class="btn" id="run">🔍 Tokenize</button>
+      <button class="btn-sec" id="demo-c">Demo C</button>
+      <button class="btn-sec" id="demo-py">Demo Python</button>
+      <button class="btn-clear" id="clear-btn">Clear</button>
+      <span class="status" id="status">Ready</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="sbadges" id="tok-sum"></div>
+    <div class="tw">
+      <table>
+        <thead><tr><th>#</th><th>Type</th><th>Value</th><th>Line</th><th>Col</th></tr></thead>
+        <tbody id="tok-tb"><tr><td colspan="5" class="empty">Run the lexer.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <footer>
+    <div>Name: <strong>Vijay Anand</strong></div>
+    <div>Registration Number: <strong>RA2311003050021</strong></div>
+  </footer>
+</div>
+
+<script>
+/* ── KEYWORDS ── */
+const C_KEYWORDS = new Set(['int','float','char','double','void','if','else','for','while','do',
+  'return','break','continue','switch','case','default','struct','typedef','unsigned','signed',
+  'long','short','static','const','include','define']);
+const PY_KEYWORDS = new Set(['def','return','if','elif','else','for','while','in','range','print',
+  'and','or','not','True','False','None','import','from','pass','break','continue','class','lambda',
+  'try','except','finally','with','as','is','del','yield','global','nonlocal']);
+
+function detectLang(src){
+  if(/^\s*#include|^\s*int\s+main\s*\(|printf\s*\(/.test(src)) return 'c';
+  if(/def\s+\w+\s*\(|print\s*\(|:\s*$/.test(src)) return 'py';
+  return 'c';
+}
+
+/* ── LEXER ONLY ── */
+function tokenize(src){
+  const lang = detectLang(src);
+  const KEYWORDS = lang==='py' ? PY_KEYWORDS : C_KEYWORDS;
+  const tokens = [];
+  let i=0, line=1, col=1;
+  const addTok=(type,val,ln,cl)=>tokens.push({type,value:val,line:ln,col:cl});
+
+  while(i<src.length){
+    const ch = src[i];
+    const startCol = col, startLine = line;
+
+    if(ch==='\\n'){addTok('NEWLINE','\\n',line,col);line++;col=1;i++;continue;}
+    if(/\s/.test(ch)){col++;i++;continue;}
+    if(ch==='#'){let j=i; while(j<src.length && src[j]!=='\\n') j++; addTok('PREPROCESSOR',src.slice(i,j),startLine,startCol); col+=j-i; i=j; continue;}
+    if(src[i]==='/' && src[i+1]==='/'){let j=i; while(j<src.length && src[j]!=='\\n') j++; addTok('COMMENT',src.slice(i,j),startLine,startCol); col+=j-i; i=j; continue;}
+    if(ch==='#' || (lang==='py' && ch==='#')){let j=i; while(j<src.length && src[j]!=='\\n') j++; addTok('COMMENT',src.slice(i,j),startLine,startCol); col+=j-i; i=j; continue;}
+    if(src[i]==='/' && src[i+1]==='*'){let j=i+2; while(j<src.length-1 && !(src[j]==='*' && src[j+1]==='/')) { if(src[j]==='\\n'){line++;col=1;} else col++; j++; } j+=2; col+=2; addTok('COMMENT',src.slice(i,j),startLine,startCol); i=j; continue;}
+    if(ch==='"' || ch==="'"){const q=ch; let j=i+1, s=q; while(j<src.length && src[j]!==q){ if(src[j]==='\\\\'){s+=src[j]+src[j+1];j+=2;} else {s+=src[j];j++;} } s+=q; j++; addTok('STRING',s,startLine,startCol); col+=s.length; i=j; continue;}
+    if(/\d/.test(ch) || (ch==='.' && /\d/.test(src[i+1]))){let j=i, isFloat=false; while(j<src.length && /[\d]/.test(src[j])) j++; if(j<src.length && src[j]==='.'){isFloat=true;j++;while(j<src.length && /\d/.test(src[j])) j++;} if(j<src.length && /[eE]/.test(src[j])){isFloat=true;j++; if(/[+-]/.test(src[j]))j++; while(j<src.length&&/\d/.test(src[j]))j++;} const num=src.slice(i,j); addTok(isFloat?'FLOAT':'INTEGER',num,startLine,startCol); col+=num.length; i=j; continue;}
+    if(/[a-zA-Z_]/.test(ch)){let j=i; while(j<src.length && /[a-zA-Z0-9_]/.test(src[j])) j++; const word=src.slice(i,j); addTok(KEYWORDS.has(word)?'KEYWORD':'IDENTIFIER',word,startLine,startCol); col+=word.length; i=j; continue;}
+    const two=src.slice(i,i+2);
+    if(['==','!=','<=','>=','&&','||','++','--','+=','-=','*=','/=','->','**'].includes(two)){addTok('OPERATOR',two,startLine,startCol);col+=2;i+=2;continue;}
+    if('+-*/%=<>!&|^~'.includes(ch)){addTok('OPERATOR',ch,startLine,startCol);col++;i++;continue;}
+    if('(){}[];:,.'.includes(ch)){addTok('DELIMITER',ch,startLine,startCol);col++;i++;continue;}
+    addTok('UNKNOWN',ch,startLine,startCol);col++;i++;
+  }
+  return tokens;
+}
+
+/* ── RENDER ── */
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+function render(tokens){
+  const filtered = tokens.filter(t=>t.type!=='NEWLINE');
+  const counts = {};
+  for(const t of filtered) counts[t.type] = (counts[t.type]||0)+1;
+  document.getElementById('tok-sum').innerHTML =
+    Object.entries(counts).map(([k,v])=>`<span class="badge ${esc(k)}">${esc(k)} <b>${v}</b></span>`).join('') || '<span class="badge">No tokens</span>';
+
+  const tb = document.getElementById('tok-tb');
+  if(!filtered.length){tb.innerHTML='<tr><td colspan="5" class="empty">No tokens.</td></tr>'; return;}
+  tb.innerHTML = filtered.map((t,i)=>`
+    <tr class="type-${esc(t.type)}">
+      <td class="val">${i+1}</td>
+      <td><span class="badge ${esc(t.type)}">${esc(t.type)}</span></td>
+      <td class="val">${esc(t.value)}</td>
+      <td class="val">${t.line}</td>
+      <td class="val">${t.col}</td>
+    </tr>`).join('');
+}
+
+/* ── UI ── */
+const status = document.getElementById('status');
+document.getElementById('run').addEventListener('click',()=>{
+  const code = document.getElementById('code').value;
+  if(!code.trim()){status.textContent='No code to tokenize.';return;}
+  status.textContent='Lexing…';
+  try{
+    const tokens = tokenize(code);
+    render(tokens);
+    status.textContent = `✅ ${tokens.length} tokens (${tokens.filter(t=>t.type!=='NEWLINE').length} non-newline)`;
+  }catch(e){
+    status.textContent = '❌ Error: '+e.message;
+  }
+});
+
+document.getElementById('clear-btn').addEventListener('click',()=>{
+  document.getElementById('code').value='';
+  document.getElementById('tok-sum').innerHTML='';
+  document.getElementById('tok-tb').innerHTML='<tr><td colspan="5" class="empty">Run the lexer.</td></tr>';
+  status.textContent='Ready';
+});
+
+document.getElementById('demo-c').addEventListener('click',()=>{
+  document.getElementById('code').value=`#include <stdio.h>
+
+int main() {
+  int x = 2 + 3;
+  printf("x = %d", x);
+  return 0;
+}`;
+  document.getElementById('run').click();
+});
+
+document.getElementById('demo-py').addEventListener('click',()=>{
+  document.getElementById('code').value=`# Python demo
+def add(a, b):
+    return a + b
+
+x = add(2, 3)
+print("sum =", x)`;
+  document.getElementById('run').click();
+});
+</script>
+</body>
+</html>
