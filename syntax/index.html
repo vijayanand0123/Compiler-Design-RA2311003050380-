@@ -1,0 +1,1452 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Prime Compiler — Lexer + Syntax Analyzer</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,600;0,700;1,400&family=Space+Grotesk:wght@400;500;600;700&family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#080b10;
+  --surface:#0e1117;
+  --card:#12161f;
+  --card2:#171b26;
+  --border:#1e2333;
+  --border2:#252d42;
+  --accent:#00d4ff;
+  --accent2:#0099cc;
+  --accent3:#00ffcc;
+  --gold:#ffd166;
+  --purple:#b388ff;
+  --pink:#ff6eb4;
+  --green:#39ff8c;
+  --red:#ff4d6d;
+  --orange:#ff9f43;
+  --text:#dce8f0;
+  --muted:#4a5568;
+  --muted2:#6b7a99;
+  --tree-line:#1e3a5f;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+body{
+  font-family:'Outfit',sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  min-height:100vh;
+  overflow-x:hidden;
+}
+
+/* ── GRID BACKGROUND ── */
+body::before{
+  content:'';position:fixed;inset:0;z-index:0;
+  background-image:
+    linear-gradient(rgba(0,212,255,.03) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,212,255,.03) 1px,transparent 1px);
+  background-size:40px 40px;
+  pointer-events:none;
+}
+
+.page{max-width:1400px;margin:0 auto;padding:24px 20px 60px;position:relative;z-index:1;}
+
+/* ── HEADER ── */
+header{text-align:center;margin-bottom:32px;padding:32px 0 20px;}
+.badge-row{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:16px;}
+.pill{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:5px 14px;border-radius:999px;
+  background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.25);
+  color:var(--accent);font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;
+}
+.pill-gold{background:rgba(255,209,102,.08);border-color:rgba(255,209,102,.25);color:var(--gold);}
+h1{
+  font-family:'Outfit',sans-serif;font-size:42px;font-weight:800;line-height:1.1;
+  background:linear-gradient(135deg,#fff 0%,var(--accent) 45%,var(--accent3) 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  margin-bottom:10px;letter-spacing:-1px;
+}
+.sub{color:var(--muted2);font-size:14px;max-width:600px;margin:0 auto;line-height:1.7;font-weight:300;}
+
+/* ── PIPELINE STEPS ── */
+.pipeline{
+  display:flex;align-items:center;justify-content:center;gap:0;
+  margin:20px auto 28px;max-width:600px;
+}
+.pstep{
+  display:flex;flex-direction:column;align-items:center;gap:4px;
+  padding:10px 20px;border-radius:10px;
+  background:var(--card);border:1px solid var(--border);
+  font-size:12px;font-weight:600;color:var(--muted2);
+  position:relative;cursor:default;transition:all .2s;min-width:110px;text-align:center;
+}
+.pstep:hover{border-color:var(--border2);color:var(--text);}
+.pstep.active{border-color:rgba(0,212,255,.4);background:rgba(0,212,255,.07);color:var(--accent);}
+.pstep.done{border-color:rgba(57,255,140,.3);background:rgba(57,255,140,.05);color:var(--green);}
+.pstep-icon{font-size:18px;}
+.parrow{color:var(--border2);font-size:18px;padding:0 4px;font-family:'JetBrains Mono',monospace;}
+
+/* ── MAIN GRID ── */
+.main-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;}
+@media(max-width:900px){.main-grid{grid-template-columns:1fr;}}
+
+/* ── CARDS ── */
+.card{
+  background:var(--card);border:1px solid var(--border);border-radius:16px;
+  overflow:hidden;box-shadow:0 4px 40px rgba(0,0,0,.5);
+}
+.card-head{
+  padding:13px 16px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+  background:rgba(255,255,255,.02);
+}
+.card-title{
+  font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--muted2);display:flex;align-items:center;gap:8px;
+}
+.card-title span{font-size:14px;}
+.card-body{padding:16px;}
+
+/* ── TEXTAREA ── */
+textarea{
+  width:100%;min-height:240px;padding:14px;border-radius:10px;
+  border:1px solid var(--border);background:#070a0f;
+  color:#cce8f4;font-family:'JetBrains Mono',monospace;font-size:12.5px;
+  resize:vertical;outline:none;tab-size:2;line-height:1.7;
+  transition:border-color .2s,box-shadow .2s;
+}
+textarea:focus{border-color:rgba(0,212,255,.4);box-shadow:0 0 0 3px rgba(0,212,255,.08);}
+
+/* ── CONTROLS ── */
+.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:12px 16px;border-top:1px solid var(--border);}
+.btn{
+  background:linear-gradient(135deg,var(--accent2),var(--accent));
+  color:#05080f;border:none;border-radius:9px;
+  padding:9px 20px;font-weight:700;cursor:pointer;font-size:13px;
+  font-family:'Outfit',sans-serif;letter-spacing:.3px;
+  transition:opacity .15s,transform .1s;
+}
+.btn:hover{opacity:.9;transform:translateY(-1px);}
+.btn:active{transform:translateY(0);}
+.btn-sec{
+  background:transparent;border:1px solid var(--border2);
+  color:var(--muted2);border-radius:9px;padding:9px 14px;
+  cursor:pointer;font-size:12px;font-family:'Outfit',sans-serif;font-weight:600;
+  transition:all .2s;
+}
+.btn-sec:hover{border-color:var(--accent);color:var(--accent);}
+.status{color:var(--muted2);font-size:12px;flex:1;font-family:'JetBrains Mono',monospace;}
+
+/* ── TOKEN TABLE ── */
+.tw{max-height:340px;overflow:auto;border-radius:8px;border:1px solid var(--border);}
+.tw::-webkit-scrollbar{width:5px;height:5px;}
+.tw::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
+table{width:100%;border-collapse:collapse;}
+thead{position:sticky;top:0;background:#070a0f;z-index:1;}
+th,td{padding:7px 10px;font-size:11.5px;text-align:left;border-bottom:1px solid var(--border);}
+th{color:var(--muted);text-transform:uppercase;font-weight:700;letter-spacing:.6px;font-size:10px;}
+td.val{font-family:'JetBrains Mono',monospace;color:var(--text);}
+.empty{text-align:center;color:var(--muted);padding:28px;font-size:12.5px;font-family:'JetBrains Mono',monospace;}
+tr:hover td{background:rgba(255,255,255,.02);}
+
+/* ── BADGES ── */
+.sbadges{display:flex;gap:5px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--border);min-height:40px;}
+.badge{padding:3px 9px;border-radius:5px;font-weight:700;font-size:10.5px;font-family:'JetBrains Mono',monospace;}
+.badge.KEYWORD{color:#b388ff;background:rgba(179,136,255,.12);}
+.badge.IDENTIFIER{color:var(--accent);background:rgba(0,212,255,.1);}
+.badge.INTEGER,.badge.FLOAT{color:var(--green);background:rgba(57,255,140,.1);}
+.badge.STRING{color:var(--orange);background:rgba(255,159,67,.1);}
+.badge.OPERATOR{color:#f48fb1;background:rgba(244,143,177,.1);}
+.badge.DELIMITER{color:var(--gold);background:rgba(255,209,102,.1);}
+.badge.COMMENT{color:var(--muted2);background:rgba(107,122,153,.1);}
+.badge.PREPROCESSOR{color:var(--accent3);background:rgba(0,255,204,.08);}
+.badge.UNKNOWN{color:var(--red);background:rgba(255,77,109,.1);}
+
+/* ── PARSE TREE SECTION ── */
+.tree-section{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:0 4px 40px rgba(0,0,0,.5);}
+.tree-toolbar{
+  padding:13px 16px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  background:rgba(255,255,255,.02);
+}
+.tree-title{font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted2);display:flex;align-items:center;gap:8px;flex:1;}
+.view-toggle{display:flex;border:1px solid var(--border2);border-radius:8px;overflow:hidden;}
+.view-btn{
+  padding:6px 13px;font-size:11.5px;font-weight:600;cursor:pointer;
+  background:transparent;border:none;color:var(--muted2);
+  font-family:'Outfit',sans-serif;transition:all .15s;
+}
+.view-btn.active{background:rgba(0,212,255,.12);color:var(--accent);}
+
+/* ── SVG PARSE TREE ── */
+#tree-svg-wrap{
+  overflow:auto;min-height:300px;background:#070a0f;
+  position:relative;
+}
+#tree-svg-wrap::-webkit-scrollbar{width:7px;height:7px;}
+#tree-svg-wrap::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px;}
+#tree-svg-wrap svg{display:block;}
+
+/* ── TEXT TREE ── */
+#text-tree{
+  display:none;font-family:'JetBrains Mono',monospace;font-size:12px;
+  color:var(--text);padding:20px;line-height:1.8;
+  background:#070a0f;min-height:300px;overflow:auto;max-height:600px;
+  white-space:pre;
+}
+
+/* ── ERRORS ── */
+.error-box{
+  margin:12px 16px;padding:12px 16px;border-radius:8px;
+  background:rgba(255,77,109,.08);border:1px solid rgba(255,77,109,.25);
+  color:#ff8fa3;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.8;
+}
+.error-box .err-title{font-weight:700;color:var(--red);margin-bottom:6px;font-size:11px;letter-spacing:1px;text-transform:uppercase;}
+
+/* ── SUCCESS BANNER ── */
+.success-banner{
+  margin:12px 16px;padding:10px 16px;border-radius:8px;
+  background:rgba(57,255,140,.06);border:1px solid rgba(57,255,140,.2);
+  color:var(--green);font-size:12px;font-family:'JetBrains Mono',monospace;
+}
+
+/* ── NODE TOOLTIP ── */
+#tooltip{
+  position:fixed;z-index:100;pointer-events:none;
+  background:#0e1117;border:1px solid var(--border2);
+  border-radius:8px;padding:8px 12px;font-family:'JetBrains Mono',monospace;font-size:11.5px;
+  color:var(--text);box-shadow:0 8px 32px rgba(0,0,0,.6);
+  opacity:0;transition:opacity .15s;max-width:280px;
+}
+#tooltip.show{opacity:1;}
+
+/* ── FOOTER ── */
+footer{
+  margin-top:24px;padding:14px 20px;border-top:1px solid var(--border);
+  display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;
+  color:var(--muted2);font-size:12px;font-family:'JetBrains Mono',monospace;
+}
+footer strong{color:var(--text);}
+
+/* ── SCROLLBAR global ── */
+::-webkit-scrollbar{width:6px;height:6px;}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
+
+/* ── LANG TAG ── */
+.lang-tag{
+  font-size:10px;padding:2px 8px;border-radius:4px;
+  font-family:'JetBrains Mono',monospace;font-weight:700;letter-spacing:.5px;
+}
+.lang-c{background:rgba(0,212,255,.12);color:var(--accent);}
+.lang-py{background:rgba(255,209,102,.12);color:var(--gold);}
+</style>
+</head>
+<body>
+<div id="tooltip"></div>
+
+<div class="page">
+<!-- ── HEADER ── -->
+<header>
+  <div class="badge-row">
+    <span class="pill">⚡ Prime Compiler</span>
+    <span class="pill pill-gold">✦ v2.0</span>
+  </div>
+  <h1>Lexer + Syntax Analyzer</h1>
+  <p class="sub">Full two-phase compiler front-end: tokenise source code then parse it into a visual parse tree using a recursive-descent parser.</p>
+  <div class="pipeline">
+    <div class="pstep" id="ps-src"><span class="pstep-icon">📝</span>Source</div>
+    <div class="parrow">──▶</div>
+    <div class="pstep" id="ps-lex"><span class="pstep-icon">🔬</span>Lexer</div>
+    <div class="parrow">──▶</div>
+    <div class="pstep" id="ps-syn"><span class="pstep-icon">🌳</span>Parser</div>
+    <div class="parrow">──▶</div>
+    <div class="pstep" id="ps-tree"><span class="pstep-icon">✅</span>Parse Tree</div>
+  </div>
+</header>
+
+<!-- ── SOURCE + TOKENS ── -->
+<div class="main-grid">
+  <!-- Source input -->
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title"><span>📝</span> Source Code <span id="lang-indicator"></span></div>
+      <div style="display:flex;gap:6px;">
+        <button class="btn-sec" id="demo-c">C Demo</button>
+        <button class="btn-sec" id="demo-py">Python Demo</button>
+      </div>
+    </div>
+    <div class="card-body" style="padding:12px;">
+      <textarea id="code" spellcheck="false">#include &lt;stdio.h&gt;
+
+int main() {
+    int x = 2 + 3;
+    float y = 1.5 * x;
+    if (x > 4) {
+        printf("big\n");
+    }
+    return 0;
+}</textarea>
+    </div>
+    <div class="controls">
+      <button class="btn" id="run">⚡ Run Pipeline</button>
+      <button class="btn-sec" id="clear-btn">Clear</button>
+      <span class="status" id="status">Ready — enter code above</span>
+    </div>
+  </div>
+
+  <!-- Token stream -->
+  <div class="card">
+    <div class="card-head">
+      <div class="card-title"><span>🔬</span> Token Stream <small style="font-size:10px;margin-left:4px;" id="tok-count"></small></div>
+    </div>
+    <div class="sbadges" id="tok-sum"></div>
+    <div class="tw">
+      <table>
+        <thead><tr><th>#</th><th>Type</th><th>Value</th><th>Ln</th><th>Col</th></tr></thead>
+        <tbody id="tok-tb"><tr><td colspan="5" class="empty">Run the pipeline to see tokens.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ── PARSE TREE ── -->
+<div class="tree-section">
+  <div class="tree-toolbar">
+    <div class="tree-title"><span>🌳</span> Parse Tree — Abstract Syntax</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <div class="view-toggle">
+        <button class="view-btn active" id="vb-svg" onclick="switchView('svg')">Visual</button>
+        <button class="view-btn" id="vb-text" onclick="switchView('text')">Text</button>
+      </div>
+      <button class="btn-sec" id="expand-btn" onclick="expandAll()">Expand All</button>
+      <button class="btn-sec" id="collapse-btn" onclick="collapseAll()">Collapse All</button>
+    </div>
+  </div>
+  <div id="tree-errors"></div>
+  <div id="tree-success"></div>
+  <div id="tree-svg-wrap"><div class="empty" style="padding:48px;">Run the pipeline to generate a parse tree.</div></div>
+  <pre id="text-tree"></pre>
+</div>
+
+<footer>
+  <div>Name: <strong>Vijay Anand</strong></div>
+  <div>Reg: <strong>RA2311003050380</strong></div>
+  <div style="color:var(--muted);">Phase 1: Lexical Analysis &nbsp;|&nbsp; Phase 2: Syntax Analysis</div>
+</footer>
+</div>
+
+<script>
+/* ══════════════════════════════════════════
+   PHASE 1 — LEXICAL ANALYSER
+══════════════════════════════════════════ */
+const C_KW = new Set(['auto','break','case','char','const','continue','default','do','double',
+  'else','enum','extern','float','for','goto','if','inline','int','long','register','return',
+  'short','signed','sizeof','static','struct','switch','typedef','union','unsigned','void',
+  'volatile','while','include','define','ifndef','ifdef','endif','pragma']);
+
+const PY_KW = new Set(['False','None','True','and','as','assert','async','await','break','class',
+  'continue','def','del','elif','else','except','finally','for','from','global','if','import',
+  'in','is','lambda','nonlocal','not','or','pass','raise','return','try','while','with','yield']);
+
+function detectLang(src){
+  if(/^\s*#\s*include\b/.test(src)||/\bint\s+main\s*\(/.test(src)||/\bprintf\s*\(/.test(src)) return 'c';
+  if(/^\s*def\s+\w+\s*\(/m.test(src)||/^\s*import\s+\w/m.test(src)||/:\s*\n/.test(src)) return 'py';
+  return 'c';
+}
+
+function tokenize(src){
+  const lang = detectLang(src);
+  const KW = lang==='py'?PY_KW:C_KW;
+  const tokens=[];
+  let i=0,line=1,col=1;
+  const add=(type,val,ln,cl)=>tokens.push({type,value:val,line:ln,col:cl});
+
+  while(i<src.length){
+    const sl=line,sc=col,ch=src[i];
+    if(ch==='\r'){i++;if(src[i]==='\n')i++;line++;col=1;continue;}
+    if(ch==='\n'){i++;line++;col=1;continue;}
+    if(ch===' '||ch==='\t'){i++;col++;continue;}
+
+    // block comment
+    if(src[i]==='/'&&src[i+1]==='*'){
+      let j=i+2;
+      while(j<src.length-1&&!(src[j]==='*'&&src[j+1]==='/')){
+        if(src[j]==='\n'){line++;col=1;}else col++;j++;
+      }
+      j+=2;col+=2;add('COMMENT',src.slice(i,j),sl,sc);i=j;continue;
+    }
+    // line comment //
+    if(src[i]==='/'&&src[i+1]==='/'){
+      let j=i;while(j<src.length&&src[j]!=='\n'&&src[j]!=='\r')j++;
+      add('COMMENT',src.slice(i,j),sl,sc);col+=j-i;i=j;continue;
+    }
+    // python comment #
+    if(lang==='py'&&ch==='#'){
+      let j=i;while(j<src.length&&src[j]!=='\n'&&src[j]!=='\r')j++;
+      add('COMMENT',src.slice(i,j),sl,sc);col+=j-i;i=j;continue;
+    }
+    // C preprocessor #
+    if(lang==='c'&&ch==='#'){
+      let j=i;
+      while(j<src.length){
+        if(src[j]==='\\'&&(src[j+1]==='\n'||src[j+1]==='\r')){j+=2;if(src[j-1]==='\r'&&src[j]==='\n')j++;line++;col=1;}
+        else if(src[j]==='\n'||src[j]==='\r')break;
+        else j++;
+      }
+      add('PREPROCESSOR',src.slice(i,j),sl,sc);col+=j-i;i=j;continue;
+    }
+    // python triple strings
+    if(lang==='py'&&(src.slice(i,i+3)==='"""'||src.slice(i,i+3)==="'''")){
+      const q3=src.slice(i,i+3);let j=i+3;
+      while(j<src.length-2&&src.slice(j,j+3)!==q3){if(src[j]==='\n'){line++;col=1;}else col++;j++;}
+      j+=3;add('STRING',src.slice(i,j),sl,sc);col+=3;i=j;continue;
+    }
+    // strings
+    if(ch==='"'||ch==="'"){
+      const q=ch;let j=i+1,s=q;
+      while(j<src.length&&src[j]!==q&&src[j]!=='\n'&&src[j]!=='\r'){
+        if(src[j]==='\\'){s+=src[j]+src[j+1];j+=2;}else{s+=src[j];j++;}
+      }
+      if(j<src.length&&src[j]===q){s+=q;j++;}
+      add('STRING',s,sl,sc);col+=j-i;i=j;continue;
+    }
+    // numbers
+    if(/[0-9]/.test(ch)||(ch==='.'&&/[0-9]/.test(src[i+1]||''))){
+      let j=i,isF=false;
+      if(src[j]==='0'&&/[xX]/.test(src[j+1])){j+=2;while(j<src.length&&/[0-9a-fA-F]/.test(src[j]))j++;}
+      else{
+        while(j<src.length&&/[0-9]/.test(src[j]))j++;
+        if(j<src.length&&src[j]==='.'&&/[0-9]/.test(src[j+1]||'')){isF=true;j++;while(j<src.length&&/[0-9]/.test(src[j]))j++;}
+        if(j<src.length&&/[eE]/.test(src[j])){isF=true;j++;if(/[+\-]/.test(src[j]))j++;while(j<src.length&&/[0-9]/.test(src[j]))j++;}
+        while(j<src.length&&/[uUlLfF]/.test(src[j])){if(/[fF]/.test(src[j]))isF=true;j++;}
+      }
+      add(isF?'FLOAT':'INTEGER',src.slice(i,j),sl,sc);col+=j-i;i=j;continue;
+    }
+    // identifiers / keywords
+    if(/[a-zA-Z_]/.test(ch)){
+      let j=i;while(j<src.length&&/[a-zA-Z0-9_]/.test(src[j]))j++;
+      const w=src.slice(i,j);add(KW.has(w)?'KEYWORD':'IDENTIFIER',w,sl,sc);col+=j-i;i=j;continue;
+    }
+    // multi-char operators
+    const t3=src.slice(i,i+3);
+    if(['<<=','>>=','...'].includes(t3)){add('OPERATOR',t3,sl,sc);col+=3;i+=3;continue;}
+    const t2=src.slice(i,i+2);
+    if(['==','!=','<=','>=','&&','||','++','--','+=','-=','*=','/=','%=','&=','|=','^=','->','**','>>','<<','::'].includes(t2)){add('OPERATOR',t2,sl,sc);col+=2;i+=2;continue;}
+    if('+-*/%=<>!&|^~'.includes(ch)){add('OPERATOR',ch,sl,sc);col++;i++;continue;}
+    if('(){}[];:,.\\_@'.includes(ch)){add('DELIMITER',ch,sl,sc);col++;i++;continue;}
+    add('UNKNOWN',ch,sl,sc);col++;i++;
+  }
+  return{tokens,lang};
+}
+
+/* ══════════════════════════════════════════
+   PHASE 2 — RECURSIVE-DESCENT PARSER
+   Supports a meaningful subset of C and Python:
+   - Variable declarations / assignments
+   - If / else / elif
+   - While / for loops
+   - Function definitions
+   - Return / break / continue
+   - Expressions (binary ops, calls, literals)
+   - Preprocessor directives (C)
+══════════════════════════════════════════ */
+
+class ParseError extends Error{constructor(msg,tok){super(msg);this.tok=tok;}}
+
+class Parser{
+  constructor(tokens,lang){
+    // filter out comments and preprocessor for the grammar (keep for display)
+    this.all=tokens;
+    this.toks=tokens.filter(t=>t.type!=='COMMENT'&&!(t.type==='PREPROCESSOR'&&lang==='c'));
+    this.prep=tokens.filter(t=>t.type==='PREPROCESSOR');
+    this.pos=0;
+    this.lang=lang;
+    this.errors=[];
+  }
+  peek(off=0){return this.toks[this.pos+off]||{type:'EOF',value:'<EOF>',line:0,col:0};}
+  consume(){return this.toks[this.pos++]||{type:'EOF',value:'<EOF>',line:0,col:0};}
+  expect(type,val){
+    const t=this.peek();
+    if(t.type!==type&&t.value!==val&&t.type!=='EOF'){
+      // soft error — log but keep going
+      this.errors.push(`Line ${t.line}: expected ${val||type}, got '${t.value}'`);
+      return t;
+    }
+    return this.consume();
+  }
+  match(...vals){
+    const t=this.peek();
+    if(vals.includes(t.value)||vals.includes(t.type)){this.consume();return t;}
+    return null;
+  }
+  isEOF(){return this.pos>=this.toks.length;}
+
+  // ── Parse entire program
+  parseProgram(){
+    const node=N('Program',[]);
+    // Attach preprocessor children at top
+    for(const p of this.prep) node.children.push(N('Preprocessor',[],p.value,p));
+    while(!this.isEOF()){
+      try{
+        const stmt=this.lang==='c'?this.parseCStatement():this.parsePyStatement();
+        if(stmt)node.children.push(stmt);
+      }catch(e){
+        if(e instanceof ParseError){this.errors.push(`Line ${e.tok?.line||'?'}: ${e.message}`);}
+        else{this.errors.push(e.message);}
+        // skip one token to recover
+        if(!this.isEOF())this.consume();
+      }
+    }
+    return node;
+  }
+
+  /* ─── C PARSER ─────────────────────────── */
+  parseCStatement(){
+    const t=this.peek();
+    if(t.type==='EOF') return null;
+
+    // skip stray semicolons
+    if(t.value===';'){this.consume();return null;}
+
+    // closing brace handled by caller
+    if(t.value==='}') return null;
+
+    // function definition or variable declaration: type identifier
+    if(t.type==='KEYWORD'&&['int','float','char','double','void','unsigned','signed','long','short','static','const'].includes(t.value)){
+      return this.parseCDeclOrFunc();
+    }
+    if(t.value==='if') return this.parseCIf();
+    if(t.value==='while') return this.parseCWhile();
+    if(t.value==='for') return this.parseCFor();
+    if(t.value==='return') return this.parseCReturn();
+    if(t.value==='break'||t.value==='continue'){
+      const kw=this.consume();this.match(';');
+      return N(kw.value==='break'?'BreakStatement':'ContinueStatement',[],null,kw);
+    }
+    if(t.value==='{') return this.parseCBlock();
+
+    // expression statement (assignments, calls, etc.)
+    const expr=this.parseCExpr();
+    this.match(';');
+    return N('ExpressionStatement',[expr]);
+  }
+
+  parseCDeclOrFunc(){
+    const typeNode=this.parseCType();
+    const name=this.peek();
+
+    if(name.type!=='IDENTIFIER'){
+      // just a type keyword alone? skip
+      this.errors.push(`Line ${name.line}: expected identifier after type`);
+      return typeNode;
+    }
+    this.consume(); // eat name
+
+    // pointer to function or just function?
+    if(this.peek().value==='('){
+      // Could be function call or function definition
+      const args=this.parseCArgList();
+      if(this.peek().value==='{'){
+        // function definition
+        const body=this.parseCBlock();
+        const node=N('FunctionDefinition',[typeNode,N('FunctionName',[],name.value,name),args,body],null,name);
+        return node;
+      } else {
+        this.match(';');
+        const call=N('CallExpression',[N('Identifier',[],name.value,name),args],null,name);
+        return N('ExpressionStatement',[call]);
+      }
+    }
+
+    // variable declaration, possibly with initialiser
+    const decl=N('VariableDeclaration',[typeNode,N('Identifier',[],name.value,name)],null,name);
+    if(this.peek().value==='='){
+      this.consume();
+      decl.children.push(N('Initializer',[this.parseCExpr()]));
+    }
+    // handle comma-separated: int a, b, c;
+    while(this.peek().value===','){
+      this.consume();
+      const extra=this.peek();
+      if(extra.type==='IDENTIFIER'){
+        this.consume();
+        decl.children.push(N('Identifier',[],extra.value,extra));
+        if(this.peek().value==='='){this.consume();decl.children.push(N('Initializer',[this.parseCExpr()]));}
+      }
+    }
+    this.match(';');
+    return decl;
+  }
+
+  parseCType(){
+    const parts=[];
+    const qualifiers=['const','unsigned','signed','long','short','static','volatile','inline','extern'];
+    const typeKws=['int','float','char','double','void','struct','enum','union'];
+    while(qualifiers.includes(this.peek().value)||typeKws.includes(this.peek().value)){
+      parts.push(this.consume().value);
+    }
+    // pointer stars
+    while(this.peek().value==='*'){parts.push(this.consume().value);}
+    return N('TypeSpecifier',[],parts.join(' ')||'auto');
+  }
+
+  parseCArgList(){
+    const node=N('ParameterList',[]);
+    this.expect('DELIMITER','(');
+    while(this.peek().value!==')'&&this.peek().type!=='EOF'){
+      // param: type name
+      if(['int','float','char','double','void','unsigned','signed','long','short','const'].includes(this.peek().value)){
+        const t=this.parseCType();
+        if(this.peek().type==='IDENTIFIER'){
+          const nm=this.consume();
+          node.children.push(N('Parameter',[t,N('Identifier',[],nm.value,nm)]));
+        } else {
+          node.children.push(N('Parameter',[t]));
+        }
+      } else {
+        // expression arg (function call)
+        node.children.push(this.parseCExpr());
+      }
+      if(this.peek().value!==',') break;
+      this.consume();
+    }
+    this.expect('DELIMITER',')');
+    return node;
+  }
+
+  parseCBlock(){
+    const node=N('Block',[]);
+    this.expect('DELIMITER','{');
+    while(this.peek().value!=='}'&&!this.isEOF()){
+      try{
+        const s=this.parseCStatement();
+        if(s)node.children.push(s);
+      }catch(e){
+        if(e instanceof ParseError)this.errors.push(`Line ${e.tok?.line||'?'}: ${e.message}`);
+        else this.errors.push(e.message);
+        if(!this.isEOF())this.consume();
+      }
+    }
+    this.expect('DELIMITER','}');
+    return node;
+  }
+
+  parseCIf(){
+    const tok=this.consume(); // if
+    const node=N('IfStatement',[],null,tok);
+    this.expect('DELIMITER','(');
+    node.children.push(N('Condition',[this.parseCExpr()]));
+    this.expect('DELIMITER',')');
+    node.children.push(N('Then',[this.parseCBlock()]));
+    if(this.peek().value==='else'){
+      this.consume();
+      if(this.peek().value==='if') node.children.push(N('Else',[this.parseCIf()]));
+      else node.children.push(N('Else',[this.parseCBlock()]));
+    }
+    return node;
+  }
+
+  parseCWhile(){
+    const tok=this.consume();
+    const node=N('WhileStatement',[],null,tok);
+    this.expect('DELIMITER','(');
+    node.children.push(N('Condition',[this.parseCExpr()]));
+    this.expect('DELIMITER',')');
+    node.children.push(N('Body',[this.parseCBlock()]));
+    return node;
+  }
+
+  parseCFor(){
+    const tok=this.consume();
+    const node=N('ForStatement',[],null,tok);
+    this.expect('DELIMITER','(');
+    // init
+    if(this.peek().value!==';'){
+      if(['int','float','char','double'].includes(this.peek().value)){
+        node.children.push(N('Init',[this.parseCDeclOrFunc()]));
+      } else {
+        node.children.push(N('Init',[this.parseCExpr()]));this.match(';');
+      }
+    } else {this.consume();node.children.push(N('Init',[]));}
+    // condition
+    if(this.peek().value!==';'){node.children.push(N('Condition',[this.parseCExpr()]));}
+    else node.children.push(N('Condition',[]));
+    this.match(';');
+    // update
+    if(this.peek().value!==')'){node.children.push(N('Update',[this.parseCExpr()]));}
+    else node.children.push(N('Update',[]));
+    this.expect('DELIMITER',')');
+    node.children.push(N('Body',[this.parseCBlock()]));
+    return node;
+  }
+
+  parseCReturn(){
+    const tok=this.consume();
+    const node=N('ReturnStatement',[],null,tok);
+    if(this.peek().value!==';'&&this.peek().type!=='EOF'){
+      node.children.push(this.parseCExpr());
+    }
+    this.match(';');
+    return node;
+  }
+
+  // Expression parser with precedence (Pratt-style levels)
+  parseCExpr(minPrec=0){
+    let left=this.parseCUnary();
+    const PREC={
+      '||':1,'&&':2,'|':3,'^':4,'&':5,
+      '==':6,'!=':6,'<':7,'>':7,'<=':7,'>=':7,
+      '<<':8,'>>':8,'+':9,'-':9,'*':10,'/':10,'%':10
+    };
+    const ASSIGN=['=','+=','-=','*=','/=','%=','&=','|=','^=','<<=','>>='];
+    while(true){
+      const op=this.peek();
+      if(ASSIGN.includes(op.value)){
+        this.consume();
+        const right=this.parseCExpr(0);
+        left=N('AssignmentExpression',[left,N('Operator',[],op.value,op),right],null,op);
+        continue;
+      }
+      const p=PREC[op.value];
+      if(p===undefined||p<=minPrec) break;
+      this.consume();
+      const right=this.parseCExpr(p);
+      left=N('BinaryExpression',[left,N('Operator',[],op.value,op),right],null,op);
+    }
+    return left;
+  }
+
+  parseCUnary(){
+    const t=this.peek();
+    if(t.value==='!'||t.value==='~'||t.value==='-'||t.value==='+'||t.value==='*'||t.value==='&'){
+      this.consume();return N('UnaryExpression',[N('Operator',[],t.value,t),this.parseCUnary()],null,t);
+    }
+    if(t.value==='++'||t.value==='--'){
+      this.consume();return N('PrefixExpression',[N('Operator',[],t.value,t),this.parseCUnary()],null,t);
+    }
+    return this.parseCPostfix();
+  }
+
+  parseCPostfix(){
+    let node=this.parseCPrimary();
+    while(true){
+      if(this.peek().value==='('){ // function call
+        const args=this.parseCCallArgs();
+        node=N('CallExpression',[node,args]);
+      } else if(this.peek().value==='['){ // array index
+        this.consume();
+        const idx=this.parseCExpr();
+        this.expect('DELIMITER',']');
+        node=N('IndexExpression',[node,idx]);
+      } else if(this.peek().value==='++'||this.peek().value==='--'){
+        const op=this.consume();
+        node=N('PostfixExpression',[node,N('Operator',[],op.value,op)]);
+      } else if(this.peek().value==='.'||this.peek().value==='->'){
+        const op=this.consume();
+        const mem=this.consume();
+        node=N('MemberExpression',[node,N('Operator',[],op.value,op),N('Identifier',[],mem.value,mem)]);
+      } else break;
+    }
+    return node;
+  }
+
+  parseCCallArgs(){
+    const node=N('Arguments',[]);
+    this.expect('DELIMITER','(');
+    while(this.peek().value!==')'&&this.peek().type!=='EOF'){
+      node.children.push(this.parseCExpr());
+      if(this.peek().value!==',') break;
+      this.consume();
+    }
+    this.expect('DELIMITER',')');
+    return node;
+  }
+
+  parseCPrimary(){
+    const t=this.peek();
+    if(t.value==='('){
+      this.consume();
+      const e=this.parseCExpr();
+      this.expect('DELIMITER',')');
+      return N('GroupExpression',[e]);
+    }
+    if(t.type==='INTEGER'){this.consume();return N('IntegerLiteral',[],t.value,t);}
+    if(t.type==='FLOAT'){this.consume();return N('FloatLiteral',[],t.value,t);}
+    if(t.type==='STRING'){this.consume();return N('StringLiteral',[],t.value,t);}
+    if(t.type==='IDENTIFIER'){this.consume();return N('Identifier',[],t.value,t);}
+    if(t.type==='KEYWORD'&&t.value==='sizeof'){
+      this.consume();
+      this.expect('DELIMITER','(');
+      const inner=this.parseCType();
+      this.expect('DELIMITER',')');
+      return N('SizeofExpression',[inner],null,t);
+    }
+    // fallback
+    this.consume();
+    return N('Unknown',[],t.value,t);
+  }
+
+  /* ─── PYTHON PARSER ─────────────────────────── */
+  parsePyStatement(){
+    const t=this.peek();
+    if(t.type==='EOF') return null;
+    if(t.value==='def') return this.parsePyFuncDef();
+    if(t.value==='class') return this.parsePyClassDef();
+    if(t.value==='if') return this.parsePyIf();
+    if(t.value==='while') return this.parsePyWhile();
+    if(t.value==='for') return this.parsePyFor();
+    if(t.value==='return') return this.parsePyReturn();
+    if(t.value==='import') return this.parsePyImport();
+    if(t.value==='from') return this.parsePyFromImport();
+    if(t.value==='pass'||t.value==='break'||t.value==='continue'){
+      const kw=this.consume();
+      return N(kw.value==='pass'?'PassStatement':kw.value==='break'?'BreakStatement':'ContinueStatement',[],null,kw);
+    }
+    // expression / assignment
+    return this.parsePyExprStmt();
+  }
+
+  parsePyFuncDef(){
+    const tok=this.consume(); // def
+    const name=this.consume();
+    const node=N('FunctionDefinition',[N('FunctionName',[],name.value,name)],null,tok);
+    // params
+    this.expect('DELIMITER','(');
+    const params=N('ParameterList',[]);
+    while(this.peek().value!==')'&&this.peek().type!=='EOF'){
+      const p=this.consume();
+      const param=N('Parameter',[N('Identifier',[],p.value,p)]);
+      if(this.peek().value==='='){this.consume();param.children.push(N('Default',[this.parsePyExpr()]));}
+      params.children.push(param);
+      if(this.peek().value!==',') break;
+      this.consume();
+    }
+    this.expect('DELIMITER',')');
+    if(this.peek().value==='->'){this.consume();params.children.push(N('ReturnType',[this.parsePyExpr()]));}
+    node.children.push(params);
+    this.expect('DELIMITER',':');
+    node.children.push(N('Body',this.parsePyBlock()));
+    return node;
+  }
+
+  parsePyClassDef(){
+    const tok=this.consume();
+    const name=this.consume();
+    const node=N('ClassDefinition',[N('ClassName',[],name.value,name)],null,tok);
+    if(this.peek().value==='('){
+      this.consume();
+      const bases=N('BaseClasses',[]);
+      while(this.peek().value!==')'&&this.peek().type!=='EOF'){
+        const b=this.consume();bases.children.push(N('BaseClass',[],b.value,b));
+        if(this.peek().value!==',')break;this.consume();
+      }
+      this.expect('DELIMITER',')');node.children.push(bases);
+    }
+    this.expect('DELIMITER',':');
+    node.children.push(N('Body',this.parsePyBlock()));
+    return node;
+  }
+
+  parsePyBlock(){
+    // Python blocks are indent-based; we approximate by parsing statements
+    // until we hit a dedent-like situation (next keyword at same or higher level)
+    const stmts=[];
+    // just parse as many statements as possible
+    let safety=0;
+    while(!this.isEOF()&&safety++<200){
+      const t=this.peek();
+      if(t.type==='EOF') break;
+      try{
+        const s=this.parsePyStatement();
+        if(s)stmts.push(s);
+        else break;
+      }catch(e){
+        if(e instanceof ParseError)this.errors.push(`Line ${e.tok?.line||'?'}: ${e.message}`);
+        else this.errors.push(e.message);
+        if(!this.isEOF())this.consume();
+      }
+    }
+    return stmts;
+  }
+
+  parsePyIf(){
+    const tok=this.consume(); // if
+    const node=N('IfStatement',[],null,tok);
+    node.children.push(N('Condition',[this.parsePyExpr()]));
+    this.expect('DELIMITER',':');
+    node.children.push(N('Then',this.parsePyBlock()));
+    while(this.peek().value==='elif'){
+      const elt=this.consume();
+      const elif=N('ElifClause',[],null,elt);
+      elif.children.push(N('Condition',[this.parsePyExpr()]));
+      this.expect('DELIMITER',':');
+      elif.children.push(N('Body',this.parsePyBlock()));
+      node.children.push(elif);
+    }
+    if(this.peek().value==='else'){
+      this.consume();this.expect('DELIMITER',':');
+      node.children.push(N('Else',this.parsePyBlock()));
+    }
+    return node;
+  }
+
+  parsePyWhile(){
+    const tok=this.consume();
+    const node=N('WhileStatement',[],null,tok);
+    node.children.push(N('Condition',[this.parsePyExpr()]));
+    this.expect('DELIMITER',':');
+    node.children.push(N('Body',this.parsePyBlock()));
+    return node;
+  }
+
+  parsePyFor(){
+    const tok=this.consume();
+    const node=N('ForStatement',[],null,tok);
+    const target=this.consume();
+    node.children.push(N('Target',[],target.value,target));
+    this.expect('KEYWORD','in');
+    node.children.push(N('Iterable',[this.parsePyExpr()]));
+    this.expect('DELIMITER',':');
+    node.children.push(N('Body',this.parsePyBlock()));
+    return node;
+  }
+
+  parsePyReturn(){
+    const tok=this.consume();
+    const node=N('ReturnStatement',[],null,tok);
+    if(!this.isEOF()&&this.peek().value!==':'&&this.peek().type!=='EOF'){
+      node.children.push(this.parsePyExpr());
+    }
+    return node;
+  }
+
+  parsePyImport(){
+    const tok=this.consume();
+    const node=N('ImportStatement',[],null,tok);
+    while(!this.isEOF()){
+      const m=this.consume();
+      const imp=N('Module',[],m.value,m);
+      if(this.peek().value==='as'){this.consume();const al=this.consume();imp.children.push(N('Alias',[],al.value,al));}
+      node.children.push(imp);
+      if(this.peek().value!==',')break;this.consume();
+    }
+    return node;
+  }
+
+  parsePyFromImport(){
+    const tok=this.consume(); // from
+    const mod=this.consume();
+    const node=N('FromImportStatement',[N('Module',[],mod.value,mod)],null,tok);
+    this.expect('KEYWORD','import');
+    if(this.peek().value==='*'){this.consume();node.children.push(N('Star',[],null));}
+    else{
+      while(!this.isEOF()){
+        const nm=this.consume();
+        const imp=N('Name',[],nm.value,nm);
+        if(this.peek().value==='as'){this.consume();const al=this.consume();imp.children.push(N('Alias',[],al.value,al));}
+        node.children.push(imp);
+        if(this.peek().value!==',')break;this.consume();
+      }
+    }
+    return node;
+  }
+
+  parsePyExprStmt(){
+    const left=this.parsePyExpr();
+    if(this.peek().value==='='||['+=','-=','*=','/=','%=','**='].includes(this.peek().value)){
+      const op=this.consume();
+      const right=this.parsePyExpr();
+      return N('AssignmentStatement',[left,N('Operator',[],op.value,op),right],null,op);
+    }
+    return N('ExpressionStatement',[left]);
+  }
+
+  parsePyExpr(minP=0){
+    let left=this.parsePyUnary();
+    const PREC={'or':1,'and':2,'in':3,'not':3,'is':3,'<':4,'>':4,'==':4,'!=':4,'<=':4,'>=':4,
+      '+':5,'-':5,'*':6,'/':6,'//':6,'%':6,'**':7};
+    while(true){
+      const op=this.peek();
+      const p=PREC[op.value];
+      if(p===undefined||p<=minP)break;
+      this.consume();
+      const right=this.parsePyExpr(p);
+      left=N('BinaryExpression',[left,N('Operator',[],op.value,op),right],null,op);
+    }
+    return left;
+  }
+
+  parsePyUnary(){
+    const t=this.peek();
+    if(t.value==='-'||t.value==='+'||t.value==='not'||t.value==='~'){
+      this.consume();return N('UnaryExpression',[N('Operator',[],t.value,t),this.parsePyUnary()],null,t);
+    }
+    return this.parsePyPostfix();
+  }
+
+  parsePyPostfix(){
+    let node=this.parsePyPrimary();
+    while(true){
+      if(this.peek().value==='('){
+        const args=this.parsePyCallArgs();
+        node=N('CallExpression',[node,args]);
+      } else if(this.peek().value==='['){
+        this.consume();const idx=this.parsePyExpr();this.expect('DELIMITER',']');
+        node=N('IndexExpression',[node,idx]);
+      } else if(this.peek().value==='.'){
+        this.consume();const mem=this.consume();
+        node=N('AttributeAccess',[node,N('Identifier',[],mem.value,mem)]);
+      } else break;
+    }
+    return node;
+  }
+
+  parsePyCallArgs(){
+    const node=N('Arguments',[]);
+    this.expect('DELIMITER','(');
+    while(this.peek().value!==')'&&this.peek().type!=='EOF'){
+      if(this.peek().type==='IDENTIFIER'&&this.toks[this.pos+1]?.value==='='){
+        const k=this.consume();this.consume();const v=this.parsePyExpr();
+        node.children.push(N('KeywordArg',[N('Identifier',[],k.value,k),v]));
+      } else {
+        node.children.push(this.parsePyExpr());
+      }
+      if(this.peek().value!==',')break;this.consume();
+    }
+    this.expect('DELIMITER',')');
+    return node;
+  }
+
+  parsePyPrimary(){
+    const t=this.peek();
+    if(t.value==='('){
+      this.consume();
+      if(this.peek().value===')'){this.consume();return N('Tuple',[]);}
+      const e=this.parsePyExpr();
+      if(this.peek().value===','){
+        const tup=N('Tuple',[e]);
+        while(this.peek().value===','&&this.peek(1).value!==')'){this.consume();tup.children.push(this.parsePyExpr());}
+        this.match(',');this.expect('DELIMITER',')');return tup;
+      }
+      this.expect('DELIMITER',')');return N('GroupExpression',[e]);
+    }
+    if(t.value==='['){
+      this.consume();const lst=N('ListLiteral',[]);
+      while(this.peek().value!==']'&&this.peek().type!=='EOF'){
+        lst.children.push(this.parsePyExpr());
+        if(this.peek().value!==',')break;this.consume();
+      }
+      this.expect('DELIMITER',']');return lst;
+    }
+    if(t.value==='{'){
+      this.consume();const dct=N('DictLiteral',[]);
+      while(this.peek().value!=='}'&&this.peek().type!=='EOF'){
+        const k=this.parsePyExpr();this.expect('DELIMITER',':');const v=this.parsePyExpr();
+        dct.children.push(N('KeyValuePair',[k,v]));
+        if(this.peek().value!==',')break;this.consume();
+      }
+      this.expect('DELIMITER','}');return dct;
+    }
+    if(t.type==='INTEGER'){this.consume();return N('IntegerLiteral',[],t.value,t);}
+    if(t.type==='FLOAT'){this.consume();return N('FloatLiteral',[],t.value,t);}
+    if(t.type==='STRING'){this.consume();return N('StringLiteral',[],t.value,t);}
+    if(t.type==='KEYWORD'&&['True','False','None'].includes(t.value)){this.consume();return N('BoolLiteral',[],t.value,t);}
+    if(t.type==='IDENTIFIER'||t.type==='KEYWORD'){this.consume();return N('Identifier',[],t.value,t);}
+    this.consume();return N('Unknown',[],t.value,t);
+  }
+}
+
+/* ── Node factory ── */
+function N(type,children=[],label=null,tok=null){
+  return{type,children,label,tok,collapsed:false,id:Math.random().toString(36).slice(2)};
+}
+
+/* ══════════════════════════════════════════
+   PARSE TREE RENDERER (SVG)
+══════════════════════════════════════════ */
+const NODE_W=130, NODE_H=38, H_GAP=18, V_GAP=56;
+
+// Color map per node family
+const NODE_COLORS={
+  Program:'#0d2540',           FunctionDefinition:'#1a1040',
+  FunctionName:'#2d1060',      ParameterList:'#1d1545',
+  Parameter:'#1d1545',         Block:'#0d2030',
+  IfStatement:'#2a1500',       Condition:'#3a1800',
+  Then:'#1a2800',              Else:'#1a2800',
+  ElifClause:'#2a1500',
+  WhileStatement:'#002535',    ForStatement:'#002535',
+  Body:'#0d2535',              Init:'#0d2535',
+  Update:'#0d2535',            Iterable:'#0d2535',
+  ReturnStatement:'#251828',   BreakStatement:'#251828',
+  ContinueStatement:'#251828', PassStatement:'#251828',
+  BinaryExpression:'#0a2020',  AssignmentExpression:'#0a2020',
+  AssignmentStatement:'#0a2020',UnaryExpression:'#0a2020',
+  CallExpression:'#1a2010',    Arguments:'#142010',
+  KeywordArg:'#142010',        IndexExpression:'#101a20',
+  MemberExpression:'#101a20',  AttributeAccess:'#101a20',
+  Identifier:'#101820',        IntegerLiteral:'#0a1a10',
+  FloatLiteral:'#0a1a10',      StringLiteral:'#1a1000',
+  BoolLiteral:'#0a1a10',       TypeSpecifier:'#1a0030',
+  VariableDeclaration:'#1a0030',Operator:'#200a00',
+  Preprocessor:'#001a1a',      ImportStatement:'#001a20',
+  FromImportStatement:'#001a20',ClassDefinition:'#1a1040',
+  GroupExpression:'#080f1a',   ExpressionStatement:'#0a0f1a',
+  Initializer:'#100a1a',       ListLiteral:'#0a1a10',
+  DictLiteral:'#1a1000',       Tuple:'#0a1010',
+  Target:'#0d2030',            Module:'#001a20',
+  Alias:'#001a20',             BaseClasses:'#1a1040',
+  Default:'#1a1040',           SizeofExpression:'#1a0030',
+};
+const NODE_BORDER={
+  Program:'#00d4ff',FunctionDefinition:'#b388ff',FunctionName:'#b388ff',
+  IfStatement:'#ff9f43',Condition:'#ff9f43',Then:'#39ff8c',Else:'#ff6eb4',
+  ElifClause:'#ff9f43',WhileStatement:'#00d4ff',ForStatement:'#00d4ff',
+  ReturnStatement:'#ff4d6d',BreakStatement:'#ff4d6d',ContinueStatement:'#ff4d6d',
+  PassStatement:'#ff4d6d',BinaryExpression:'#14b8a6',CallExpression:'#39ff8c',
+  Identifier:'#6b7a99',IntegerLiteral:'#39ff8c',FloatLiteral:'#39ff8c',
+  StringLiteral:'#ff9f43',BoolLiteral:'#39ff8c',TypeSpecifier:'#b388ff',
+  VariableDeclaration:'#b388ff',Operator:'#f48fb1',Preprocessor:'#00ffcc',
+  AssignmentExpression:'#14b8a6',AssignmentStatement:'#14b8a6',
+};
+const NODE_TEXT_COLOR={
+  Program:'#00d4ff',FunctionDefinition:'#d4a8ff',FunctionName:'#d4a8ff',
+  IfStatement:'#ffb86c',Condition:'#ffb86c',Then:'#7dffb0',Else:'#ff9ed4',
+  ElifClause:'#ffb86c',WhileStatement:'#7ae8ff',ForStatement:'#7ae8ff',
+  ReturnStatement:'#ff8fa3',BreakStatement:'#ff8fa3',ContinueStatement:'#ff8fa3',
+  PassStatement:'#ff8fa3',BinaryExpression:'#4dd9cc',AssignmentExpression:'#4dd9cc',
+  AssignmentStatement:'#4dd9cc',CallExpression:'#8dffbe',Identifier:'#a0b4c8',
+  IntegerLiteral:'#8dffbe',FloatLiteral:'#8dffbe',StringLiteral:'#ffcc80',
+  BoolLiteral:'#8dffbe',TypeSpecifier:'#d4a8ff',VariableDeclaration:'#d4a8ff',
+  Operator:'#ffb3cc',Preprocessor:'#80ffee',
+};
+
+let treeData=null;
+let currentView='svg';
+let allNodes=[];
+
+function computeLayout(node,depth=0){
+  allNodes.push(node);
+  if(node.collapsed||!node.children||node.children.length===0){
+    node.layoutW=NODE_W;node.subtreeW=NODE_W;return;
+  }
+  let totalW=0;
+  for(const c of node.children){computeLayout(c,depth+1);totalW+=c.subtreeW+H_GAP;}
+  totalW-=H_GAP;
+  node.subtreeW=Math.max(NODE_W,totalW);
+  node.layoutW=NODE_W;
+}
+
+function assignPositions(node,x,y){
+  node.x=x+(node.subtreeW-NODE_W)/2;
+  node.y=y;
+  if(node.collapsed||!node.children||node.children.length===0)return;
+  let cx=x;
+  for(const c of node.children){
+    assignPositions(c,cx,y+NODE_H+V_GAP);
+    cx+=c.subtreeW+H_GAP;
+  }
+}
+
+function renderSVG(root){
+  allNodes=[];
+  computeLayout(root);
+  assignPositions(root,40,40);
+
+  let maxX=0,maxY=0;
+  function bounds(n){
+    maxX=Math.max(maxX,(n.x||0)+NODE_W);
+    maxY=Math.max(maxY,(n.y||0)+NODE_H);
+    if(!n.collapsed&&n.children)n.children.forEach(bounds);
+  }
+  bounds(root);
+  const W=maxX+60,H=maxY+60;
+
+  let svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" style="font-family:'JetBrains Mono',monospace;">`;
+  svg+=`<defs><marker id="arr" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="5" markerHeight="5" orient="auto"><path d="M1 1L7 4L1 7" fill="none" stroke="#1e3a5f" stroke-width="1.5" stroke-linecap="round"/></marker></defs>`;
+
+  // draw edges first
+  function drawEdges(n){
+    if(n.collapsed||!n.children)return;
+    for(const c of n.children){
+      const x1=n.x+NODE_W/2,y1=n.y+NODE_H;
+      const x2=c.x+NODE_W/2,y2=c.y;
+      const my=(y1+y2)/2;
+      svg+=`<path d="M${x1},${y1} C${x1},${my} ${x2},${my} ${x2},${y2}" fill="none" stroke="#1e3a5f" stroke-width="1.2" marker-end="url(#arr)"/>`;
+      drawEdges(c);
+    }
+  }
+  drawEdges(root);
+
+  // draw nodes
+  function drawNode(n){
+    const bg=NODE_COLORS[n.type]||'#0d1520';
+    const border=NODE_BORDER[n.type]||'#1e2d40';
+    const textC=NODE_TEXT_COLOR[n.type]||'#8899bb';
+    const isLeaf=!n.children||n.children.length===0;
+    const isCollapsible=n.children&&n.children.length>0;
+
+    // label = label prop or type
+    let topText=n.type;
+    let botText=n.label?String(n.label):'';
+    if(botText.length>16)botText=botText.slice(0,15)+'…';
+
+    svg+=`<g class="tree-node" data-id="${n.id}" style="cursor:${isCollapsible?'pointer':'default'};" onclick="toggleNode('${n.id}')">`;
+    // shadow
+    svg+=`<rect x="${n.x+2}" y="${n.y+2}" width="${NODE_W}" height="${NODE_H}" rx="7" fill="rgba(0,0,0,.4)"/>`;
+    // main rect
+    svg+=`<rect x="${n.x}" y="${n.y}" width="${NODE_W}" height="${NODE_H}" rx="7" fill="${bg}" stroke="${border}" stroke-width="${n.type==='Program'?1.5:1}"/>`;
+
+    // collapse indicator
+    if(isCollapsible){
+      const sym=n.collapsed?'+':'−';
+      svg+=`<rect x="${n.x+NODE_W-16}" y="${n.y+6}" width="12" height="12" rx="3" fill="rgba(255,255,255,.06)" stroke="${border}" stroke-width=".7"/>`;
+      svg+=`<text x="${n.x+NODE_W-10}" y="${n.y+14}" text-anchor="middle" font-size="9" fill="${border}" font-weight="700">${sym}</text>`;
+    }
+
+    // leaf dot
+    if(isLeaf) svg+=`<circle cx="${n.x+8}" cy="${n.y+NODE_H/2}" r="3" fill="${border}" opacity=".7"/>`;
+
+    if(botText){
+      svg+=`<text x="${n.x+NODE_W/2}" y="${n.y+13}" text-anchor="middle" font-size="9" fill="${textC}" font-weight="700" letter-spacing="0.5">${esc(topText)}</text>`;
+      svg+=`<text x="${n.x+NODE_W/2}" y="${n.y+27}" text-anchor="middle" font-size="10" fill="#dce8f0" font-weight="400">${esc(botText)}</text>`;
+    } else {
+      svg+=`<text x="${n.x+NODE_W/2}" y="${n.y+22}" text-anchor="middle" font-size="10" fill="${textC}" font-weight="600">${esc(topText)}</text>`;
+    }
+
+    // collapsed child count badge
+    if(n.collapsed&&n.children&&n.children.length>0){
+      svg+=`<rect x="${n.x+NODE_W/2-12}" y="${n.y+NODE_H-5}" width="24" height="12" rx="6" fill="${border}"/>`;
+      svg+=`<text x="${n.x+NODE_W/2}" y="${n.y+NODE_H+4}" text-anchor="middle" font-size="8.5" fill="#0d1520" font-weight="700">${countDescendants(n)} ▾</text>`;
+    }
+
+    svg+=`</g>`;
+    if(!n.collapsed&&n.children)n.children.forEach(drawNode);
+  }
+  drawNode(root);
+  svg+=`</svg>`;
+  return svg;
+}
+
+function countDescendants(n){
+  if(!n.children)return 0;
+  return n.children.length+n.children.reduce((s,c)=>s+countDescendants(c),0);
+}
+
+// Finds node by id in tree
+function findNode(root,id){
+  if(root.id===id)return root;
+  if(!root.children)return null;
+  for(const c of root.children){const f=findNode(c,id);if(f)return f;}
+  return null;
+}
+
+function toggleNode(id){
+  if(!treeData)return;
+  const n=findNode(treeData,id);
+  if(n&&n.children&&n.children.length>0){n.collapsed=!n.collapsed;redrawTree();}
+}
+function expandAll(){
+  if(!treeData)return;
+  function ex(n){n.collapsed=false;if(n.children)n.children.forEach(ex);}
+  ex(treeData);redrawTree();
+}
+function collapseAll(){
+  if(!treeData)return;
+  function co(n){if(n.children&&n.children.length>0){n.collapsed=true;}if(n.children)n.children.forEach(co);}
+  // collapse all except root
+  if(treeData.children)treeData.children.forEach(co);
+  redrawTree();
+}
+
+function redrawTree(){
+  if(!treeData)return;
+  if(currentView==='svg'){
+    document.getElementById('tree-svg-wrap').innerHTML=renderSVG(treeData);
+  } else {
+    document.getElementById('text-tree').textContent=treeToText(treeData,'','');
+  }
+}
+
+function treeToText(node,prefix,childPrefix){
+  const label=node.label?` "${node.label}"`:'';
+  const loc=node.tok?` [${node.tok.line}:${node.tok.col}]`:'';
+  let out=prefix+node.type+label+loc+'\n';
+  if(node.collapsed){out+=childPrefix+'  … (collapsed)\n';return out;}
+  if(node.children){
+    for(let i=0;i<node.children.length;i++){
+      const last=i===node.children.length-1;
+      out+=treeToText(node.children[i],childPrefix+(last?'└─ ':'├─ '),childPrefix+(last?'   ':'│  '));
+    }
+  }
+  return out;
+}
+
+function switchView(v){
+  currentView=v;
+  document.getElementById('vb-svg').classList.toggle('active',v==='svg');
+  document.getElementById('vb-text').classList.toggle('active',v==='text');
+  document.getElementById('tree-svg-wrap').style.display=v==='svg'?'block':'none';
+  document.getElementById('text-tree').style.display=v==='text'?'block':'none';
+  redrawTree();
+}
+
+/* ── Render token table ── */
+const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+function renderTokens(tokens){
+  const counts={};
+  for(const t of tokens)counts[t.type]=(counts[t.type]||0)+1;
+  document.getElementById('tok-sum').innerHTML=
+    Object.entries(counts).map(([k,v])=>`<span class="badge ${esc(k)}">${esc(k)} <b>${v}</b></span>`).join('')||'<span>No tokens</span>';
+  document.getElementById('tok-count').textContent=`— ${tokens.length} tokens`;
+  const tb=document.getElementById('tok-tb');
+  if(!tokens.length){tb.innerHTML='<tr><td colspan="5" class="empty">No tokens.</td></tr>';return;}
+  tb.innerHTML=tokens.map((t,i)=>`
+    <tr>
+      <td class="val">${i+1}</td>
+      <td><span class="badge ${esc(t.type)}">${esc(t.type)}</span></td>
+      <td class="val">${esc(t.value)}</td>
+      <td class="val">${t.line}</td>
+      <td class="val">${t.col}</td>
+    </tr>`).join('');
+}
+
+/* ── Pipeline stages ── */
+function setPipelineStage(stage){
+  const stages=['ps-src','ps-lex','ps-syn','ps-tree'];
+  stages.forEach((id,i)=>{
+    const el=document.getElementById(id);
+    el.classList.remove('active','done');
+    if(i<stage)el.classList.add('done');
+    else if(i===stage)el.classList.add('active');
+  });
+}
+
+/* ── Run ── */
+document.getElementById('run').addEventListener('click',()=>{
+  const src=document.getElementById('code').value;
+  if(!src.trim()){document.getElementById('status').textContent='No source code.';return;}
+
+  // clear errors/success
+  document.getElementById('tree-errors').innerHTML='';
+  document.getElementById('tree-success').innerHTML='';
+
+  setPipelineStage(0);
+  document.getElementById('status').textContent='Phase 1: Lexing…';
+
+  setTimeout(()=>{
+    // PHASE 1
+    setPipelineStage(1);
+    let lexResult;
+    try{lexResult=tokenize(src);}
+    catch(e){document.getElementById('status').textContent='❌ Lexer error: '+e.message;return;}
+    const {tokens,lang}=lexResult;
+
+    // update lang indicator
+    const li=document.getElementById('lang-indicator');
+    li.innerHTML=`<span class="lang-tag lang-${lang}">${lang.toUpperCase()}</span>`;
+
+    const meaningful=tokens.filter(t=>t.type!=='COMMENT');
+    renderTokens(meaningful);
+
+    document.getElementById('status').textContent=`✅ Lexed ${meaningful.length} tokens — Phase 2: Parsing…`;
+    setPipelineStage(2);
+
+    setTimeout(()=>{
+      // PHASE 2
+      const parser=new Parser(meaningful,lang);
+      let ast;
+      try{ast=parser.parseProgram();}
+      catch(e){
+        document.getElementById('tree-errors').innerHTML=`<div class="error-box"><div class="err-title">⚠ Parse Error</div>${esc(e.message)}</div>`;
+        document.getElementById('status').textContent='⚠ Parse completed with errors.';
+        return;
+      }
+
+      treeData=ast;
+
+      if(parser.errors.length>0){
+        document.getElementById('tree-errors').innerHTML=`<div class="error-box">
+          <div class="err-title">⚠ ${parser.errors.length} Warning(s)</div>
+          ${parser.errors.map(e=>'• '+esc(e)).join('<br>')}
+        </div>`;
+      } else {
+        document.getElementById('tree-success').innerHTML=`<div class="success-banner">✅ Syntax analysis complete — parse tree generated successfully.</div>`;
+      }
+
+      setPipelineStage(3);
+      redrawTree();
+
+      const nodeCount=countDescendants(ast)+1;
+      document.getElementById('status').textContent=`✅ Done — ${meaningful.length} tokens, ${nodeCount} AST nodes (${lang.toUpperCase()})`;
+    },50);
+  },10);
+});
+
+/* ── Demo programs ── */
+document.getElementById('demo-c').addEventListener('click',()=>{
+  document.getElementById('code').value=`#include <stdio.h>
+#include <stdlib.h>
+
+/* Compute factorial */
+int factorial(int n) {
+    if (n <= 1) {
+        return 1;
+    }
+    return n * factorial(n - 1);
+}
+
+int main() {
+    int i;
+    for (i = 1; i <= 5; i++) {
+        int result = factorial(i);
+        printf("fact(%d) = %d\\n", i, result);
+    }
+    return 0;
+}`;
+  document.getElementById('run').click();
+});
+
+document.getElementById('demo-py').addEventListener('click',()=>{
+  document.getElementById('code').value=`# Python demo — class and functions
+class Animal:
+    def __init__(self, name, sound):
+        self.name = name
+        self.sound = sound
+
+    def speak(self):
+        return self.name + " says " + self.sound
+
+def make_animals():
+    animals = ["cat", "dog", "cow"]
+    results = []
+    for a in animals:
+        results.append(a)
+    return results
+
+x = 10 + 20 * 3
+if x > 50:
+    print("big number")
+elif x == 50:
+    print("exactly fifty")
+else:
+    print("small")`;
+  document.getElementById('run').click();
+});
+
+document.getElementById('clear-btn').addEventListener('click',()=>{
+  document.getElementById('code').value='';
+  document.getElementById('tok-sum').innerHTML='';
+  document.getElementById('tok-count').textContent='';
+  document.getElementById('tok-tb').innerHTML='<tr><td colspan="5" class="empty">Run the pipeline to see tokens.</td></tr>';
+  document.getElementById('tree-svg-wrap').innerHTML='<div class="empty" style="padding:48px;">Run the pipeline to generate a parse tree.</div>';
+  document.getElementById('text-tree').textContent='';
+  document.getElementById('tree-errors').innerHTML='';
+  document.getElementById('tree-success').innerHTML='';
+  document.getElementById('status').textContent='Ready — enter code above';
+  document.getElementById('lang-indicator').innerHTML='';
+  treeData=null;
+  setPipelineStage(-1);
+});
+</script>
+</body>
+</html>
