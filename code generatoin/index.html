@@ -1,0 +1,1772 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Prime Compiler — Lexer · Parser · Semantic · ICG · Optimizer</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,600;0,700;1,400&family=Sora:wght@300;400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#06080d;--surface:#0b0e15;--card:#0f1219;--card2:#13171f;
+  --border:#181e2c;--border2:#1f2840;--border3:#2a3550;
+  --c1:#e8f4fd;--c2:#8bafc8;--muted:#3d4f68;--muted2:#56708a;
+  --lex:#00c2ff;--lex-d:#003d52;--lex-bg:rgba(0,194,255,.07);
+  --syn:#a78bfa;--syn-d:#2d1f5e;--syn-bg:rgba(167,139,250,.07);
+  --sem:#34d399;--sem-d:#0d3325;--sem-bg:rgba(52,211,153,.07);
+  --icg:#f59e0b;--icg-d:#3d2600;--icg-bg:rgba(245,158,11,.07);
+  --opt:#e879f9;--opt-d:#3d0050;--opt-bg:rgba(232,121,249,.07);
+  --err:#f87171;--err-bg:rgba(248,113,113,.07);--err-border:rgba(248,113,113,.25);
+  --warn:#fbbf24;--warn-bg:rgba(251,191,36,.07);--warn-border:rgba(251,191,36,.25);
+  --ok:#34d399;--ok-bg:rgba(52,211,153,.06);--ok-border:rgba(52,211,153,.2);
+  --gold:#f59e0b;--pink:#f472b6;--orange:#fb923c;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--c1);min-height:100vh;overflow-x:hidden;}
+body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.03) 2px,rgba(0,0,0,.03) 4px);}
+.page{max-width:1500px;margin:0 auto;padding:20px 18px 60px;position:relative;z-index:1;}
+
+/* ── HEADER ── */
+header{padding:28px 0 24px;text-align:center;}
+.logo-row{display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:14px;flex-wrap:wrap;}
+.logo-chip{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:4px 12px;border-radius:4px;}
+.chip-lex{background:var(--lex-bg);border:1px solid rgba(0,194,255,.3);color:var(--lex);}
+.chip-syn{background:var(--syn-bg);border:1px solid rgba(167,139,250,.3);color:var(--syn);}
+.chip-sem{background:var(--sem-bg);border:1px solid rgba(52,211,153,.3);color:var(--sem);}
+.chip-icg{background:var(--icg-bg);border:1px solid rgba(245,158,11,.35);color:var(--icg);}
+.chip-opt{background:var(--opt-bg);border:1px solid rgba(232,121,249,.35);color:var(--opt);}
+.logo-sep{color:var(--muted);font-size:14px;font-family:'JetBrains Mono',monospace;}
+h1{font-family:'Sora',sans-serif;font-size:38px;font-weight:800;letter-spacing:-1.5px;line-height:1.1;
+  background:linear-gradient(120deg,#fff 0%,var(--lex) 25%,var(--syn) 48%,var(--sem) 68%,var(--icg) 84%,var(--opt) 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:8px;}
+.sub{color:var(--muted2);font-size:13.5px;font-weight:300;max-width:680px;margin:0 auto 20px;line-height:1.7;}
+
+/* ── PIPELINE ── */
+.pipeline{display:flex;align-items:stretch;justify-content:center;gap:0;margin:0 auto 28px;max-width:1050px;}
+.pstep{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:12px 10px;
+  background:var(--card);border:1px solid var(--border);
+  font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;color:var(--muted);
+  transition:all .3s;position:relative;text-align:center;}
+.pstep:first-child{border-radius:10px 0 0 10px;}
+.pstep:last-child{border-radius:0 10px 10px 0;}
+.pstep+.pstep{border-left:none;}
+.pstep-num{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;opacity:.5;}
+.pstep-icon{font-size:20px;line-height:1;}
+.pstep-label{font-size:11.5px;}
+.pstep.active-lex{border-color:rgba(0,194,255,.5);background:var(--lex-bg);color:var(--lex);}
+.pstep.active-syn{border-color:rgba(167,139,250,.5);background:var(--syn-bg);color:var(--syn);}
+.pstep.active-sem{border-color:rgba(52,211,153,.5);background:var(--sem-bg);color:var(--sem);}
+.pstep.active-icg{border-color:rgba(245,158,11,.5);background:var(--icg-bg);color:var(--icg);}
+.pstep.active-opt{border-color:rgba(232,121,249,.5);background:var(--opt-bg);color:var(--opt);}
+.pstep.done{border-color:var(--border3);color:var(--c2);background:rgba(255,255,255,.03);}
+.pstep.done::after{content:'✓';position:absolute;top:6px;right:8px;font-size:10px;color:var(--sem);font-weight:700;}
+
+/* ── TOP GRID ── */
+.top-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
+@media(max-width:880px){.top-grid{grid-template-columns:1fr;}}
+
+/* ── CARDS ── */
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+.card-head{padding:11px 15px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,.015);}
+.card-label{font-size:10px;font-weight:700;letter-spacing:1.8px;text-transform:uppercase;display:flex;align-items:center;gap:7px;}
+.cl-lex{color:var(--lex);}
+.cl-syn{color:var(--syn);}
+.cl-sem{color:var(--sem);}
+.cl-icg{color:var(--icg);}
+.cl-opt{color:var(--opt);}
+.cl-muted{color:var(--muted2);}
+.card-actions{display:flex;gap:6px;}
+
+/* ── TEXTAREA ── */
+textarea{width:100%;min-height:230px;padding:14px;border:none;background:#050709;
+  color:#b8d4e8;font-family:'JetBrains Mono',monospace;font-size:12px;
+  resize:vertical;outline:none;tab-size:2;line-height:1.75;display:block;}
+
+/* ── CONTROLS ── */
+.ctrl-bar{padding:10px 14px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.btn{background:linear-gradient(135deg,#0077a8,var(--lex));color:#030810;border:none;
+  border-radius:8px;padding:9px 22px;font-weight:700;cursor:pointer;font-size:13px;
+  font-family:'Sora',sans-serif;letter-spacing:.2px;transition:opacity .15s,transform .1s;}
+.btn:hover{opacity:.88;transform:translateY(-1px);}
+.btn:active{transform:translateY(0);}
+.btn-ghost{background:transparent;border:1px solid var(--border2);color:var(--muted2);
+  border-radius:8px;padding:7px 12px;cursor:pointer;font-size:11.5px;font-family:'DM Sans',sans-serif;font-weight:600;
+  transition:all .2s;}
+.btn-ghost:hover{border-color:var(--border3);color:var(--c2);}
+.status-txt{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted2);flex:1;}
+
+/* ── TOKEN TABLE ── */
+.scroll-box{overflow:auto;max-height:310px;}
+.scroll-box::-webkit-scrollbar{width:4px;height:4px;}
+.scroll-box::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+table{width:100%;border-collapse:collapse;}
+thead{position:sticky;top:0;background:#07090f;z-index:1;}
+th,td{padding:6px 10px;font-size:11px;text-align:left;border-bottom:1px solid var(--border);}
+th{color:var(--muted);text-transform:uppercase;font-weight:700;letter-spacing:.7px;font-size:9.5px;}
+td.mono{font-family:'JetBrains Mono',monospace;}
+tr:hover td{background:rgba(255,255,255,.018);}
+.empty-row{text-align:center;color:var(--muted);padding:28px;font-family:'JetBrains Mono',monospace;font-size:12px;}
+
+/* ── BADGES ── */
+.badges-row{display:flex;gap:5px;flex-wrap:wrap;padding:9px 14px;border-bottom:1px solid var(--border);min-height:38px;align-items:center;}
+.tk{padding:2px 8px;border-radius:4px;font-weight:700;font-size:10px;font-family:'JetBrains Mono',monospace;}
+.tk.KEYWORD{color:#c4b5fd;background:rgba(196,181,253,.1);}
+.tk.IDENTIFIER{color:var(--lex);background:rgba(0,194,255,.1);}
+.tk.INTEGER,.tk.FLOAT{color:var(--sem);background:rgba(52,211,153,.1);}
+.tk.STRING{color:var(--orange);background:rgba(251,146,60,.1);}
+.tk.OPERATOR{color:var(--pink);background:rgba(244,114,182,.1);}
+.tk.DELIMITER{color:var(--gold);background:rgba(245,158,11,.1);}
+.tk.COMMENT{color:var(--muted2);background:rgba(86,112,138,.1);}
+.tk.PREPROCESSOR{color:#67e8f9;background:rgba(103,232,249,.08);}
+.tk.UNKNOWN{color:var(--err);background:rgba(248,113,113,.1);}
+
+/* ── TABS ── */
+.tab-bar{display:flex;border-bottom:1px solid var(--border);background:rgba(255,255,255,.01);flex-wrap:wrap;}
+.tab{padding:9px 16px;font-size:11.5px;font-weight:600;cursor:pointer;color:var(--muted2);
+  border-bottom:2px solid transparent;transition:all .2s;font-family:'DM Sans',sans-serif;}
+.tab:hover{color:var(--c2);}
+.tab.active-lex{color:var(--lex);border-bottom-color:var(--lex);}
+.tab.active-syn{color:var(--syn);border-bottom-color:var(--syn);}
+.tab.active-sem{color:var(--sem);border-bottom-color:var(--sem);}
+.tab.active-icg{color:var(--icg);border-bottom-color:var(--icg);}
+.tab.active-opt{color:var(--opt);border-bottom-color:var(--opt);}
+.tab-panel{display:none;}
+.tab-panel.visible{display:block;}
+
+/* ── PARSE TREE ── */
+#tree-wrap{overflow:auto;min-height:280px;background:#050709;}
+#tree-wrap::-webkit-scrollbar{width:6px;height:6px;}
+#tree-wrap::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
+#text-tree{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--c1);
+  padding:18px;line-height:1.85;background:#050709;min-height:280px;
+  overflow:auto;max-height:520px;white-space:pre;display:none;}
+.vtoggle{display:flex;border:1px solid var(--border2);border-radius:6px;overflow:hidden;margin-left:auto;}
+.vtbtn{padding:5px 11px;font-size:11px;font-weight:600;cursor:pointer;background:transparent;
+  border:none;color:var(--muted2);font-family:'DM Sans',sans-serif;transition:all .15s;}
+.vtbtn.on{background:rgba(167,139,250,.12);color:var(--syn);}
+
+/* ── SEMANTIC PANEL ── */
+.sem-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:16px;}
+@media(max-width:700px){.sem-grid{grid-template-columns:1fr;}}
+.sem-col-title{font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted2);margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border);}
+.sym-table{width:100%;border-collapse:collapse;font-size:11px;}
+.sym-table th{color:var(--muted);font-size:9.5px;text-transform:uppercase;letter-spacing:.6px;font-weight:700;padding:5px 8px;border-bottom:1px solid var(--border);text-align:left;}
+.sym-table td{padding:5px 8px;border-bottom:1px solid var(--border);font-family:'JetBrains Mono',monospace;font-size:10.5px;vertical-align:top;}
+.sym-table tr:hover td{background:rgba(52,211,153,.03);}
+.sym-scope{display:inline-block;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:700;}
+.scope-global{background:rgba(0,194,255,.1);color:var(--lex);}
+.scope-func{background:rgba(167,139,250,.1);color:var(--syn);}
+.scope-local{background:rgba(52,211,153,.1);color:var(--sem);}
+.sym-kind{display:inline-block;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:700;background:rgba(245,158,11,.1);color:var(--gold);}
+.sym-type{color:var(--syn);font-size:10px;}
+.sym-used{display:inline-block;width:7px;height:7px;border-radius:50%;}
+.sym-used.yes{background:var(--sem);}
+.sym-used.no{background:var(--warn);}
+.diag-list{display:flex;flex-direction:column;gap:7px;max-height:320px;overflow:auto;}
+.diag-list::-webkit-scrollbar{width:4px;}
+.diag-list::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+.diag{border-radius:7px;padding:9px 12px;font-size:11.5px;line-height:1.6;}
+.diag-err{background:var(--err-bg);border:1px solid var(--err-border);}
+.diag-warn{background:var(--warn-bg);border:1px solid var(--warn-border);}
+.diag-ok{background:var(--ok-bg);border:1px solid var(--ok-border);}
+.diag-head{display:flex;align-items:center;gap:7px;margin-bottom:3px;}
+.diag-icon{font-size:13px;}
+.diag-kind{font-size:9.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-family:'JetBrains Mono',monospace;}
+.kind-err{color:var(--err);}
+.kind-warn{color:var(--warn);}
+.kind-ok{color:var(--sem);}
+.diag-msg{color:var(--c2);font-family:'JetBrains Mono',monospace;font-size:11px;}
+.diag-loc{color:var(--muted2);font-size:10px;margin-top:3px;}
+.type-info-grid{display:flex;flex-direction:column;gap:6px;max-height:200px;overflow:auto;padding:14px 16px;}
+.ti-row{display:flex;justify-content:space-between;align-items:center;padding:5px 8px;
+  border-radius:5px;background:rgba(255,255,255,.02);border:1px solid var(--border);font-size:11px;}
+.ti-name{font-family:'JetBrains Mono',monospace;color:var(--c2);}
+.ti-type{font-family:'JetBrains Mono',monospace;padding:1px 8px;border-radius:3px;font-size:10px;font-weight:700;}
+.ty-int{background:rgba(52,211,153,.1);color:var(--sem);}
+.ty-float{background:rgba(0,194,255,.1);color:var(--lex);}
+.ty-str{background:rgba(251,146,60,.1);color:var(--orange);}
+.ty-void{background:rgba(86,112,138,.1);color:var(--muted2);}
+.ty-bool{background:rgba(167,139,250,.1);color:var(--syn);}
+.ty-func{background:rgba(245,158,11,.1);color:var(--gold);}
+.ty-unknown{background:rgba(248,113,113,.1);color:var(--err);}
+.summary-bar{display:flex;gap:10px;padding:12px 16px;border-top:1px solid var(--border);flex-wrap:wrap;}
+.sum-chip{display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:7px;font-size:12px;font-weight:600;}
+.sum-err{background:var(--err-bg);border:1px solid var(--err-border);color:var(--err);}
+.sum-warn{background:var(--warn-bg);border:1px solid var(--warn-border);color:var(--warn);}
+.sum-ok{background:var(--ok-bg);border:1px solid var(--ok-border);color:var(--sem);}
+
+/* ══════════════════════════════════════════════
+   ICG PANEL STYLES
+══════════════════════════════════════════════ */
+.icg-layout{display:grid;grid-template-columns:1fr 1fr;gap:0;min-height:420px;}
+@media(max-width:760px){.icg-layout{grid-template-columns:1fr;}}
+.icg-pane{border-right:1px solid var(--border);display:flex;flex-direction:column;}
+.icg-pane:last-child{border-right:none;}
+.icg-pane-head{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:rgba(245,158,11,.03);}
+.icg-pane-title{font-size:9.5px;font-weight:700;letter-spacing:1.8px;text-transform:uppercase;color:var(--icg);display:flex;align-items:center;gap:6px;}
+.icg-pane-sub{font-size:9px;color:var(--muted2);font-family:'JetBrains Mono',monospace;}
+
+/* Three-address code table */
+.tac-scroll{overflow:auto;flex:1;max-height:380px;}
+.tac-scroll::-webkit-scrollbar{width:4px;}
+.tac-scroll::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+.tac-table{width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;}
+.tac-table th{font-size:9px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);padding:6px 10px;border-bottom:1px solid var(--border);background:#06080d;position:sticky;top:0;font-weight:700;text-align:left;}
+.tac-table td{padding:4px 10px;border-bottom:1px solid rgba(24,30,44,.7);font-size:11px;vertical-align:middle;}
+.tac-table tr:hover td{background:rgba(245,158,11,.04);}
+.tac-lno{color:var(--muted);font-size:10px;user-select:none;width:32px;}
+.tac-label{color:var(--icg);font-weight:700;font-size:11px;}
+.tac-op{color:var(--pink);font-weight:700;min-width:72px;}
+.tac-arg{color:var(--lex);}
+.tac-arg.is-temp{color:#a5b4fc;}
+.tac-arg.is-lit{color:var(--sem);}
+.tac-arg.is-label{color:var(--icg);}
+.tac-result{color:var(--c1);font-weight:600;}
+.tac-result.is-temp{color:#a5b4fc;font-weight:700;}
+.tac-comment{color:var(--muted);font-size:10px;font-style:italic;}
+.tac-sep{background:rgba(245,158,11,.04);}
+.tac-sep td{padding:2px 10px;font-size:9px;color:var(--icg);letter-spacing:1px;border-bottom:1px solid rgba(245,158,11,.12);}
+
+/* CFG panel */
+.cfg-wrap{overflow:auto;flex:1;max-height:380px;background:#050709;position:relative;}
+.cfg-wrap::-webkit-scrollbar{width:5px;height:5px;}
+.cfg-wrap::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}
+
+/* ICG stats bar */
+.icg-stats{display:flex;gap:0;border-top:1px solid var(--border);}
+.icg-stat{flex:1;padding:10px 14px;border-right:1px solid var(--border);display:flex;flex-direction:column;gap:3px;}
+.icg-stat:last-child{border-right:none;}
+.icg-stat-val{font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:700;color:var(--icg);}
+.icg-stat-lbl{font-size:9.5px;text-transform:uppercase;letter-spacing:1px;color:var(--muted2);}
+
+/* copy btn */
+.btn-copy{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.25);color:var(--icg);
+  border-radius:6px;padding:4px 10px;cursor:pointer;font-size:10px;font-weight:700;
+  font-family:'DM Sans',sans-serif;transition:all .2s;letter-spacing:.5px;}
+.btn-copy:hover{background:rgba(245,158,11,.18);}
+.btn-copy-opt{background:rgba(232,121,249,.1);border:1px solid rgba(232,121,249,.25);color:var(--opt);
+  border-radius:6px;padding:4px 10px;cursor:pointer;font-size:10px;font-weight:700;
+  font-family:'DM Sans',sans-serif;transition:all .2s;letter-spacing:.5px;}
+.btn-copy-opt:hover{background:rgba(232,121,249,.18);}
+
+/* ICG sub-tabs */
+.icg-subtab-bar{display:flex;border-bottom:1px solid var(--border);background:rgba(245,158,11,.02);}
+.icg-stab{padding:7px 14px;font-size:11px;font-weight:600;cursor:pointer;color:var(--muted2);
+  border-bottom:2px solid transparent;transition:all .15s;font-family:'DM Sans',sans-serif;}
+.icg-stab.on{color:var(--icg);border-bottom-color:var(--icg);}
+.icg-stab-panel{display:none;}
+.icg-stab-panel.visible{display:block;}
+
+/* Optimized code */
+.opt-scroll{overflow:auto;max-height:340px;background:#050709;}
+.opt-scroll::-webkit-scrollbar{width:4px;}
+.opt-scroll::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+.opt-code{font-family:'JetBrains Mono',monospace;font-size:11.5px;line-height:1.9;padding:16px;color:#b8d4e8;white-space:pre;}
+.opt-line{display:flex;gap:10px;align-items:baseline;}
+.opt-lno{color:var(--muted);font-size:9.5px;min-width:28px;user-select:none;}
+.opt-instr{flex:1;}
+.opt-instr .kw{color:var(--syn);font-weight:700;}
+.opt-instr .op{color:var(--pink);}
+.opt-instr .tmp{color:#a5b4fc;}
+.opt-instr .lit{color:var(--sem);}
+.opt-instr .lbl{color:var(--icg);font-weight:700;}
+.opt-instr .fn{color:var(--lex);}
+.opt-instr .cm{color:var(--muted);font-style:italic;}
+.opt-badge{font-size:9px;padding:1px 6px;border-radius:3px;font-weight:700;margin-left:6px;}
+.badge-elim{background:rgba(248,113,113,.1);color:var(--err);}
+.badge-fold{background:rgba(52,211,153,.1);color:var(--sem);}
+
+/* CFG SVG */
+.cfg-block{cursor:pointer;}
+
+/* ══════════════════════════════════════════════
+   PHASE 5 — CODE OPTIMIZATION STYLES
+══════════════════════════════════════════════ */
+.opt-panel-head{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:rgba(232,121,249,.03);}
+.opt-panel-title{font-size:9.5px;font-weight:700;letter-spacing:1.8px;text-transform:uppercase;color:var(--opt);display:flex;align-items:center;gap:6px;}
+.opt-panel-sub{font-size:9px;color:var(--muted2);font-family:'JetBrains Mono',monospace;}
+
+/* Opt sub-tabs */
+.opt-subtab-bar{display:flex;border-bottom:1px solid var(--border);background:rgba(232,121,249,.02);flex-wrap:wrap;}
+.opt-stab{padding:7px 13px;font-size:11px;font-weight:600;cursor:pointer;color:var(--muted2);
+  border-bottom:2px solid transparent;transition:all .15s;font-family:'DM Sans',sans-serif;}
+.opt-stab.on{color:var(--opt);border-bottom-color:var(--opt);}
+.opt-stab-panel{display:none;}
+.opt-stab-panel.visible{display:block;}
+
+/* Optimization pass layout */
+.opt-pass-layout{display:grid;grid-template-columns:1fr 1fr;gap:0;min-height:380px;}
+@media(max-width:760px){.opt-pass-layout{grid-template-columns:1fr;}}
+.opt-pass-pane{border-right:1px solid var(--border);display:flex;flex-direction:column;}
+.opt-pass-pane:last-child{border-right:none;}
+.opt-pass-pane-head{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:rgba(232,121,249,.03);}
+.opt-pass-pane-title{font-size:9.5px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--opt);display:flex;align-items:center;gap:6px;}
+.opt-pass-code{font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.85;padding:14px;color:#b8d4e8;white-space:pre;overflow:auto;max-height:340px;background:#050709;}
+.opt-pass-code .kw{color:var(--syn);font-weight:700;}
+.opt-pass-code .lbl{color:var(--opt);font-weight:700;}
+.opt-pass-code .tmp{color:#a5b4fc;}
+.opt-pass-code .lit{color:var(--sem);}
+.opt-pass-code .fn{color:var(--lex);}
+.opt-pass-code .cm{color:var(--muted);font-style:italic;}
+.opt-pass-code .hi-cse{background:rgba(52,211,153,.12);border-left:2px solid var(--sem);padding-left:4px;display:inline-block;width:100%;}
+.opt-pass-code .hi-cp{background:rgba(0,194,255,.10);border-left:2px solid var(--lex);padding-left:4px;display:inline-block;width:100%;}
+.opt-pass-code .hi-sr{background:rgba(232,121,249,.10);border-left:2px solid var(--opt);padding-left:4px;display:inline-block;width:100%;}
+.opt-pass-code .hi-licm{background:rgba(245,158,11,.10);border-left:2px solid var(--icg);padding-left:4px;display:inline-block;width:100%;}
+.opt-pass-code .hi-ph{background:rgba(244,114,182,.10);border-left:2px solid var(--pink);padding-left:4px;display:inline-block;width:100%;}
+.opt-pass-code .hi-elim{background:rgba(248,113,113,.07);text-decoration:line-through;opacity:.5;display:inline-block;width:100%;}
+
+/* Opt stats */
+.opt-stats-bar{display:flex;gap:0;border-top:1px solid var(--border);}
+.opt-stat{flex:1;padding:10px 14px;border-right:1px solid var(--border);display:flex;flex-direction:column;gap:3px;}
+.opt-stat:last-child{border-right:none;}
+.opt-stat-val{font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:700;color:var(--opt);}
+.opt-stat-lbl{font-size:9.5px;text-transform:uppercase;letter-spacing:1px;color:var(--muted2);}
+
+/* Technique legend */
+.tech-legend{display:flex;gap:8px;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid var(--border);background:rgba(232,121,249,.02);}
+.tech-chip{display:flex;align-items:center;gap:5px;padding:3px 9px;border-radius:4px;font-size:10px;font-weight:700;font-family:'JetBrains Mono',monospace;}
+.tc-cse{background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.25);color:var(--sem);}
+.tc-cp{background:rgba(0,194,255,.1);border:1px solid rgba(0,194,255,.25);color:var(--lex);}
+.tc-sr{background:rgba(232,121,249,.1);border:1px solid rgba(232,121,249,.25);color:var(--opt);}
+.tc-licm{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.25);color:var(--icg);}
+.tc-ph{background:rgba(244,114,182,.1);border:1px solid rgba(244,114,182,.25);color:var(--pink);}
+.tc-elim{background:rgba(248,113,113,.1);border:1px solid rgba(248,113,113,.25);color:var(--err);}
+
+/* Report panel */
+.opt-report{padding:16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+@media(max-width:700px){.opt-report{grid-template-columns:1fr;}}
+.opt-report-card{border-radius:9px;border:1px solid var(--border2);background:rgba(232,121,249,.04);padding:13px 15px;}
+.opt-report-title{font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--opt);margin-bottom:8px;display:flex;align-items:center;gap:6px;}
+.opt-report-list{list-style:none;display:flex;flex-direction:column;gap:5px;}
+.opt-report-list li{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--c2);padding:4px 7px;border-radius:4px;background:rgba(255,255,255,.02);border:1px solid var(--border);}
+.opt-report-list li.change{border-color:rgba(232,121,249,.2);background:rgba(232,121,249,.05);}
+.opt-report-list li .badge{display:inline-block;padding:1px 5px;border-radius:3px;font-size:8.5px;font-weight:700;margin-right:4px;vertical-align:middle;}
+.badge-cse{background:rgba(52,211,153,.15);color:var(--sem);}
+.badge-cp{background:rgba(0,194,255,.15);color:var(--lex);}
+.badge-sr{background:rgba(232,121,249,.15);color:var(--opt);}
+.badge-licm{background:rgba(245,158,11,.15);color:var(--icg);}
+.badge-ph{background:rgba(244,114,182,.15);color:var(--pink);}
+
+footer{margin-top:20px;padding:12px 16px;border-top:1px solid var(--border);
+  display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;
+  color:var(--muted);font-size:11.5px;font-family:'JetBrains Mono',monospace;}
+footer strong{color:var(--c2);}
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- HEADER -->
+<header>
+  <div class="logo-row">
+    <span class="logo-chip chip-lex">01 · Lexer</span>
+    <span class="logo-sep">→</span>
+    <span class="logo-chip chip-syn">02 · Parser</span>
+    <span class="logo-sep">→</span>
+    <span class="logo-chip chip-sem">03 · Semantic</span>
+    <span class="logo-sep">→</span>
+    <span class="logo-chip chip-icg">04 · ICG</span>
+    <span class="logo-sep">→</span>
+    <span class="logo-chip chip-opt">05 · Optimizer</span>
+  </div>
+  <h1>Prime Compiler  v5</h1>
+  <p class="sub">Five-phase compiler front-end: tokenise → parse → semantic analysis → intermediate code generation → code optimization (CSE · Copy Propagation · Strength Reduction · LICM · Peephole).</p>
+  <div class="pipeline">
+    <div class="pstep" id="ps0"><div class="pstep-num">Phase 0</div><div class="pstep-icon">📄</div><div class="pstep-label">Source</div></div>
+    <div class="pstep" id="ps1"><div class="pstep-num">Phase 1</div><div class="pstep-icon">🔬</div><div class="pstep-label">Lexer</div></div>
+    <div class="pstep" id="ps2"><div class="pstep-num">Phase 2</div><div class="pstep-icon">🌳</div><div class="pstep-label">Parser</div></div>
+    <div class="pstep" id="ps3"><div class="pstep-num">Phase 3</div><div class="pstep-icon">🧠</div><div class="pstep-label">Semantic</div></div>
+    <div class="pstep" id="ps4"><div class="pstep-num">Phase 4</div><div class="pstep-icon">⚙️</div><div class="pstep-label">ICG</div></div>
+    <div class="pstep" id="ps5"><div class="pstep-num">Phase 5</div><div class="pstep-icon">🚀</div><div class="pstep-label">Optimizer</div></div>
+    <div class="pstep" id="ps6"><div class="pstep-num">Output</div><div class="pstep-icon">✅</div><div class="pstep-label">Report</div></div>
+  </div>
+</header>
+
+<!-- TOP ROW: Source + Tokens -->
+<div class="top-grid">
+  <div class="card">
+    <div class="card-head">
+      <div class="card-label cl-lex">🔬 Source Code <span id="lang-badge" style="margin-left:4px;"></span></div>
+      <div class="card-actions">
+        <button class="btn-ghost" id="demo-c">C Demo</button>
+        <button class="btn-ghost" id="demo-py">Python Demo</button>
+      </div>
+    </div>
+    <textarea id="code" spellcheck="false">#include &lt;stdio.h&gt;
+
+int add(int a, int b) {
+    return a + b;
+}
+
+int main() {
+    int x = 10;
+    float y = 3.14;
+    int z = add(x, 5);
+    printf("result: %d\n", z);
+    return 0;
+}</textarea>
+    <div class="ctrl-bar">
+      <button class="btn" id="run">⚡ Run All Phases</button>
+      <button class="btn-ghost" id="clear-btn">Clear</button>
+      <span class="status-txt" id="status">Ready</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div class="card-label cl-lex">🔬 Phase 1 — Token Stream <span id="tok-count" style="font-size:10px;font-weight:400;color:var(--muted2);margin-left:6px;"></span></div>
+    </div>
+    <div class="badges-row" id="tok-sum"></div>
+    <div class="scroll-box">
+      <table>
+        <thead><tr><th>#</th><th>Type</th><th>Value</th><th>Ln</th><th>Col</th></tr></thead>
+        <tbody id="tok-tb"><tr><td colspan="5" class="empty-row">Run the pipeline to see tokens.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- BOTTOM: All Phases Tabbed -->
+<div class="card" style="margin-bottom:14px;">
+  <div class="tab-bar" id="main-tabs">
+    <div class="tab active-syn" id="tab-tree" onclick="showTab('tree')">🌳 Phase 2 — Parse Tree</div>
+    <div class="tab" id="tab-sem" onclick="showTab('sem')">🧠 Phase 3 — Semantic</div>
+    <div class="tab" id="tab-icg" onclick="showTab('icg')">⚙️ Phase 4 — ICG</div>
+    <div class="tab" id="tab-opt" onclick="showTab('opt')">🚀 Phase 5 — Optimizer</div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:6px;padding:0 12px;" id="tree-toolbar">
+      <div class="vtoggle" id="tree-view-toggle">
+        <button class="vtbtn on" id="vb-svg" onclick="switchTreeView('svg')">Visual</button>
+        <button class="vtbtn" id="vb-txt" onclick="switchTreeView('txt')">Text</button>
+      </div>
+      <button class="btn-ghost" onclick="expandAll()">Expand</button>
+      <button class="btn-ghost" onclick="collapseAll()">Collapse</button>
+    </div>
+  </div>
+
+  <!-- Parse tree panel -->
+  <div class="tab-panel visible" id="panel-tree">
+    <div id="tree-wrap"><div class="empty-row" style="padding:48px 0;">Run the pipeline to generate the parse tree.</div></div>
+    <pre id="text-tree"></pre>
+  </div>
+
+  <!-- Semantic panel -->
+  <div class="tab-panel" id="panel-sem">
+    <div class="sem-grid">
+      <div>
+        <div class="sem-col-title">Symbol Table</div>
+        <div class="scroll-box" style="max-height:280px;">
+          <table class="sym-table">
+            <thead><tr><th>Name</th><th>Kind</th><th>Type</th><th>Scope</th><th>Ln</th><th>Used</th></tr></thead>
+            <tbody id="sym-tb"><tr><td colspan="6" class="empty-row">—</td></tr></tbody>
+          </table>
+        </div>
+        <div class="sem-col-title" style="margin-top:14px;">Expression Types</div>
+        <div class="type-info-grid" id="type-list"><div style="color:var(--muted);font-size:11px;">—</div></div>
+      </div>
+      <div>
+        <div class="sem-col-title">Diagnostics</div>
+        <div class="diag-list" id="diag-list"><div class="diag diag-ok"><div class="diag-head"><span class="diag-icon">⏳</span><span class="diag-kind kind-ok">Waiting</span></div><div class="diag-msg">Run the pipeline to see diagnostics.</div></div></div>
+      </div>
+    </div>
+    <div class="summary-bar" id="sem-summary"></div>
+  </div>
+
+  <!-- ICG panel -->
+  <div class="tab-panel" id="panel-icg">
+    <div class="icg-subtab-bar">
+      <div class="icg-stab on" id="istab-tac" onclick="showIcgTab('tac')">📋 Three-Address Code</div>
+      <div class="icg-stab" id="istab-opt" onclick="showIcgTab('opt')">✨ Optimised TAC</div>
+      <div class="icg-stab" id="istab-cfg" onclick="showIcgTab('cfg')">🗺 Control Flow Graph</div>
+    </div>
+
+    <!-- TAC sub-panel -->
+    <div class="icg-stab-panel visible" id="ipanel-tac">
+      <div class="icg-layout">
+        <div class="icg-pane">
+          <div class="icg-pane-head">
+            <div class="icg-pane-title">⚙️ TAC Instructions</div>
+            <button class="btn-copy" id="copy-tac-btn" onclick="copyTAC()">Copy</button>
+          </div>
+          <div class="tac-scroll">
+            <table class="tac-table" id="tac-table">
+              <thead><tr><th style="width:32px">#</th><th style="width:80px">Label</th><th style="width:90px">Op</th><th>Arg1</th><th>Arg2</th><th>Result</th></tr></thead>
+              <tbody id="tac-tb"><tr><td colspan="6" class="empty-row">Run the pipeline to generate TAC.</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="icg-pane">
+          <div class="icg-pane-head">
+            <div class="icg-pane-title">📖 TAC as Text</div>
+            <button class="btn-copy" onclick="copyTACText()">Copy</button>
+          </div>
+          <div class="opt-scroll" id="tac-text-wrap">
+            <div class="opt-code" id="tac-text-code"><span style="color:var(--muted)">Run the pipeline to see code.</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="icg-stats" id="icg-stats">
+        <div class="icg-stat"><div class="icg-stat-val" id="stat-instrs">—</div><div class="icg-stat-lbl">Instructions</div></div>
+        <div class="icg-stat"><div class="icg-stat-val" id="stat-temps">—</div><div class="icg-stat-lbl">Temporaries</div></div>
+        <div class="icg-stat"><div class="icg-stat-val" id="stat-labels">—</div><div class="icg-stat-lbl">Labels</div></div>
+        <div class="icg-stat"><div class="icg-stat-val" id="stat-funcs">—</div><div class="icg-stat-lbl">Functions</div></div>
+      </div>
+    </div>
+
+    <!-- Optimised TAC sub-panel -->
+    <div class="icg-stab-panel" id="ipanel-opt">
+      <div class="icg-layout">
+        <div class="icg-pane">
+          <div class="icg-pane-head">
+            <div class="icg-pane-title">✨ After Constant Folding</div>
+            <span class="icg-pane-sub" id="opt-fold-count">0 folds</span>
+          </div>
+          <div class="opt-scroll" id="opt-code-wrap">
+            <div class="opt-code" id="opt-code"><span style="color:var(--muted)">Run the pipeline.</span></div>
+          </div>
+        </div>
+        <div class="icg-pane">
+          <div class="icg-pane-head">
+            <div class="icg-pane-title">🗑 Dead Code Elimination</div>
+            <span class="icg-pane-sub" id="opt-elim-count">0 eliminated</span>
+          </div>
+          <div class="opt-scroll" id="dce-code-wrap">
+            <div class="opt-code" id="dce-code"><span style="color:var(--muted)">Run the pipeline.</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="icg-stats">
+        <div class="icg-stat"><div class="icg-stat-val" id="stat-orig">—</div><div class="icg-stat-lbl">Original instrs</div></div>
+        <div class="icg-stat"><div class="icg-stat-val" id="stat-folded">—</div><div class="icg-stat-lbl">Folded constants</div></div>
+        <div class="icg-stat"><div class="icg-stat-val" id="stat-eliminated">—</div><div class="icg-stat-lbl">Dead instrs removed</div></div>
+        <div class="icg-stat"><div class="icg-stat-val" id="stat-final">—</div><div class="icg-stat-lbl">Final instrs</div></div>
+      </div>
+    </div>
+
+    <!-- CFG sub-panel -->
+    <div class="icg-stab-panel" id="ipanel-cfg">
+      <div class="icg-pane-head" style="border-bottom:1px solid var(--border);">
+        <div class="icg-pane-title">🗺 Control Flow Graph</div>
+        <span class="icg-pane-sub" id="cfg-info">—</span>
+      </div>
+      <div class="cfg-wrap" id="cfg-wrap" style="max-height:440px;">
+        <div class="empty-row" style="padding:60px 0;">Run the pipeline to see the CFG.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       PHASE 5 — CODE OPTIMIZATION PANEL
+  ══════════════════════════════════════════ -->
+  <div class="tab-panel" id="panel-opt">
+    <!-- Legend -->
+    <div class="tech-legend">
+      <span class="tech-chip tc-cse">■ CSE</span>
+      <span class="tech-chip tc-cp">■ Copy Prop</span>
+      <span class="tech-chip tc-sr">■ Strength Red.</span>
+      <span class="tech-chip tc-licm">■ LICM</span>
+      <span class="tech-chip tc-ph">■ Peephole</span>
+      <span class="tech-chip tc-elim">✕ Eliminated</span>
+    </div>
+
+    <!-- Opt sub-tabs -->
+    <div class="opt-subtab-bar">
+      <div class="opt-stab on" id="ostab-cse"    onclick="showOptTab('cse')">🔁 CSE</div>
+      <div class="opt-stab"    id="ostab-cp"     onclick="showOptTab('cp')">📎 Copy Propagation</div>
+      <div class="opt-stab"    id="ostab-sr"     onclick="showOptTab('sr')">⚡ Strength Reduction</div>
+      <div class="opt-stab"    id="ostab-licm"   onclick="showOptTab('licm')">🔄 LICM</div>
+      <div class="opt-stab"    id="ostab-ph"     onclick="showOptTab('ph')">🔭 Peephole</div>
+      <div class="opt-stab"    id="ostab-report" onclick="showOptTab('report')">📊 Summary</div>
+    </div>
+
+    <!-- CSE panel -->
+    <div class="opt-stab-panel visible" id="opanel-cse">
+      <div class="opt-pass-layout">
+        <div class="opt-pass-pane">
+          <div class="opt-pass-pane-head">
+            <div class="opt-pass-pane-title">Before CSE</div>
+            <span class="icg-pane-sub" id="cse-before-count">—</span>
+          </div>
+          <div class="opt-pass-code" id="cse-before"><span style="color:var(--muted)">Run the pipeline.</span></div>
+        </div>
+        <div class="opt-pass-pane">
+          <div class="opt-pass-pane-head">
+            <div class="opt-pass-pane-title">After CSE <span style="font-size:9px;color:var(--muted2)">(highlighted = reused expression)</span></div>
+            <span class="icg-pane-sub" id="cse-after-count">—</span>
+          </div>
+          <div class="opt-pass-code" id="cse-after"><span style="color:var(--muted)">Run the pipeline.</span></div>
+        </div>
+      </div>
+      <div class="opt-stats-bar">
+        <div class="opt-stat"><div class="opt-stat-val" id="stat-cse-found">—</div><div class="opt-stat-lbl">Redundant exprs</div></div>
+        <div class="opt-stat"><div class="opt-stat-val" id="stat-cse-saved">—</div><div class="opt-stat-lbl">Instrs eliminated</div></div>
+        <div class="opt-stat"><div class="opt-stat-val" id="stat-cse-in">—</div><div class="opt-stat-lbl">Input instrs</div></div>
+        <div class="opt-stat"><div class="opt-stat-val" id="stat-cse-out">—</div><div class="opt-stat-lbl">Output instrs</div></div>
+      </div>
+    </div>
+
+    <!-- Copy Propagation panel -->
+    <div class="opt-stab-panel" id="opanel-cp">
+      <div class="opt-pass-layout">
+        <div class="opt-pass-pane">
+          <div class="opt-pass-pane-head">
+            <div class="opt-pass-pane-title">Before Copy Propagation</div>
+            <span class="icg-pane-sub" id="cp-before-count">—</span>
+          </div>
+          <div class="opt-pass-code" id="cp-before"><span style="color:var(--muted)">Run the pipeline.</span></div>
+        </div>
+        <div class="opt-pass-pane">
+          <div class="opt-pass-pane-head">
+            <div class="opt-pass-pane-title">After Copy Propagation <span style="font-size:9px;color:var(--muted2)">(highlighted = propagated)</span></div>
+            <span class="icg-pane-sub" id="cp-after-count">—</span>
+          </div>
+          <div class="opt-pass-code" id="cp-after"><span style="color:var(--muted)">Run the pipeline.</span></div>
+        </div>
+      </div>
+      <div class="opt-stats-bar">
+        <div class="opt-stat"><div class="opt-stat-val" id="stat-cp-props">—</div><div class="opt-stat-lbl">Propagations</div></div>
+        <div class="opt-stat"><div class="opt-stat-val" id="stat-cp-copies">—</div><div class="opt-stat-lbl">Copy stmts</div></div>
+        <div class="opt-stat"><div class="opt-stat-val" id="stat-cp-in">—</div><div class="opt-stat-lbl">Input instrs</div></div>
+        <div class="opt-stat"><div class="opt-stat-val" id="stat-cp-out">—</div><div class="opt-stat-lbl">Output instrs</div></div>
+      </div>
+    </div>
+
+    <!-- Strength Reduction panel -->
+    <div class="opt-stab-panel" id="opanel-sr">
+      <div class="opt-pass-layout">
+        <div class="opt-pass-pane">
+          <div class="opt-pass-pane-head">
+            <div class="opt-pass-pane-title">Before Strength Reduction</div>
+            <span class="icg-pane-sub" id="sr-before-count">—</span>
+          </div>
+          <div class="opt-pass-code" id="sr-before"><span style="color:var(--muted)">Run the pipeline.</span></div>
+        </div>
+        <div class="opt-pass-pane">
+          <div class="opt-pass-pane-head">
+            <div class="opt-pass-pane-title">After Strength Reduction <span style="font-size:9px;color:var(--muted2)">(highlighted = reduced)</span></div>
+            <span class="icg-pane-sub" id="sr-after-count">—</span>
+          </div>
+          <div class="opt-pass-code" id="sr-after"><span style="color:var(--muted)">Run the pipeline.</span></div>
+        </div>
+      </div>
+      <div class="opt-stats-bar">
+        <div class="opt-stat"><div class="opt-stat-val" id="stat-sr-muls">—</div><div class="opt-stat-lbl">MUL→SHL</div></div>
+        <div class="opt-stat"><div class="opt-stat-val" id="stat-sr-divs">—</div><div class="opt-stat-lbl">DIV→SHR</div></div>
+        <div class="opt-stat"><div class="opt-stat-val" id="stat-sr-mods">—</div><div class="opt-stat-lbl">MOD→BAND</div></div>
+        <div class="opt-stat"><div class="opt-stat-val" id="stat-sr-total">—</div><div class="opt-stat-lbl">Total reductions</div></div>
+      </div>
+    </div>
+
+    <!-- LICM panel -->
+    <div class="opt-stab-panel" id="opanel-licm">
+      <div class="opt-pass-layout">
+        <div class="opt-pass-pane">
+          <div class="opt-pass-pane-head">
+            <div class="opt-pass-pane-title">Before LICM</div>
+            <span class="icg-pane-sub" id="licm-before-count">—</span>
+          </div>
+          <div class="opt-pass-code" id="licm-before"><span style="color:var(--muted)">Run the pipeline.</span></div>
+        </div>
+        <div class="opt-pass-pane">
+          <div class="opt-pass-pane-head">
+            <div class="opt-pass-pane-title">After LICM <span style="font-size:9px;color:var(--muted2)">(highlighted = hoisted out)</span></div>
+            <span class="icg-pane-sub" id="licm-after-count">—</span>
+          </div>
+          <div class="opt-pass-code" id="licm-after"><span style="color:var(--muted)">Run the pipeline.</span></div>
+        </div>
+      </div>
+      <div class="opt-stats-bar">
+        <div class="opt-stat"><div class="opt-stat-val" id="stat-licm-loops">—</div><div class="opt-stat-lbl">Loops found</div></div>
+        <div class="opt-stat"><div class="opt-stat-val" id="stat-licm-hoisted">—</div><div class="opt-stat-lbl">Instrs hoisted</div></div>
+        <div class="opt-stat"><div class="opt-stat-val" id="stat-licm-in">—</div><div class="opt-stat-lbl">Input instrs</div></div>
+        <div class="opt-stat"><div class="opt-stat-val" id="stat-licm-out">—</div><div class="opt-stat-lbl">Output instrs</div></div>
+      </div>
+    </div>
+
+    <!-- Peephole panel -->
+    <div class="opt-stab-panel" id="opanel-ph">
+      <div class="opt-pass-layout">
+        <div class="opt-pass-pane">
+          <div class="opt-pass-pane-head">
+            <div class="opt-pass-pane-title">Before Peephole</div>
+            <span class="icg-pane-sub" id="ph-before-count">—</span>
+          </div>
+          <div class="opt-pass-code" id="ph-before"><span style="color:var(--muted)">Run the pipeline.</span></div>
+        </div>
+        <div class="opt-pass-pane">
+          <div class="opt-pass-pane-head">
+            <div class="opt-pass-pane-title">After Peephole <span style="font-size:9px;color:var(--muted2)">(highlighted = optimized)</span></div>
+            <span class="icg-pane-sub" id="ph-after-count">—</span>
+          </div>
+          <div class="opt-pass-code" id="ph-after"><span style="color:var(--muted)">Run the pipeline.</span></div>
+        </div>
+      </div>
+      <div class="opt-stats-bar">
+        <div class="opt-stat"><div class="opt-stat-val" id="stat-ph-add0">—</div><div class="opt-stat-lbl">x+0 / x-0</div></div>
+        <div class="opt-stat"><div class="opt-stat-val" id="stat-ph-mul1">—</div><div class="opt-stat-lbl">x*1 / x/1</div></div>
+        <div class="opt-stat"><div class="opt-stat-val" id="stat-ph-mul0">—</div><div class="opt-stat-lbl">x*0</div></div>
+        <div class="opt-stat"><div class="opt-stat-val" id="stat-ph-total">—</div><div class="opt-stat-lbl">Total peepholes</div></div>
+      </div>
+    </div>
+
+    <!-- Summary / Report panel -->
+    <div class="opt-stab-panel" id="opanel-report">
+      <div class="opt-report" id="opt-report-grid">
+        <div style="color:var(--muted);padding:40px;grid-column:1/-1;text-align:center;font-family:'JetBrains Mono',monospace;font-size:12px;">Run the pipeline to see the optimization report.</div>
+      </div>
+      <div class="opt-stats-bar">
+        <div class="opt-stat"><div class="opt-stat-val" id="stat-opt-before">—</div><div class="opt-stat-lbl">Before (instrs)</div></div>
+        <div class="opt-stat"><div class="opt-stat-val" id="stat-opt-after">—</div><div class="opt-stat-lbl">After (instrs)</div></div>
+        <div class="opt-stat"><div class="opt-stat-val" id="stat-opt-saved">—</div><div class="opt-stat-lbl">Instrs removed</div></div>
+        <div class="opt-stat"><div class="opt-stat-val" id="stat-opt-pct">—</div><div class="opt-stat-lbl">Reduction %</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <div>Name: <strong>Vijay Anand</strong> &nbsp;|&nbsp; Reg: <strong>RA2311003050380</strong></div>
+  <div style="color:var(--muted);">Phase 1: Lexical · Phase 2: Syntax · Phase 3: Semantic · Phase 4: ICG · Phase 5: Code Optimization</div>
+</footer>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════
+   HELPERS
+══════════════════════════════════════════════ */
+const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+/* ══════════════════════════════════════════════
+   PHASE 1 — LEXER
+══════════════════════════════════════════════ */
+const C_KW=new Set(['auto','break','case','char','const','continue','default','do','double',
+  'else','enum','extern','float','for','goto','if','inline','int','long','register','return',
+  'short','signed','sizeof','static','struct','switch','typedef','union','unsigned','void',
+  'volatile','while','include','define','ifndef','ifdef','endif','pragma','NULL']);
+const PY_KW=new Set(['False','None','True','and','as','assert','async','await','break','class',
+  'continue','def','del','elif','else','except','finally','for','from','global','if','import',
+  'in','is','lambda','nonlocal','not','or','pass','raise','return','try','while','with','yield']);
+
+function detectLang(src){
+  if(/^\s*#\s*include\b/.test(src)||/\bint\s+main\s*\(/.test(src)||/\bprintf\s*\(/.test(src)||/\bvoid\s+\w+\s*\(/.test(src))return 'c';
+  if(/^\s*def\s+\w+\s*\(/m.test(src)||/^\s*import\s+\w/m.test(src)||/:\s*\n/.test(src))return 'py';
+  return 'c';
+}
+
+function tokenize(src){
+  const lang=detectLang(src);
+  const KW=lang==='py'?PY_KW:C_KW;
+  const tokens=[];
+  let i=0,line=1,col=1;
+  const add=(type,val,ln,cl)=>tokens.push({type,value:val,line:ln,col:cl});
+  while(i<src.length){
+    const sl=line,sc=col,ch=src[i];
+    if(ch==='\r'){i++;if(src[i]==='\n')i++;line++;col=1;continue;}
+    if(ch==='\n'){i++;line++;col=1;continue;}
+    if(ch===' '||ch==='\t'){i++;col++;continue;}
+    if(src[i]==='/'&&src[i+1]==='*'){let j=i+2;while(j<src.length-1&&!(src[j]==='*'&&src[j+1]==='/')){{if(src[j]==='\n'){line++;col=1;}else col++;}j++;}j+=2;col+=2;add('COMMENT',src.slice(i,j),sl,sc);i=j;continue;}
+    if(src[i]==='/'&&src[i+1]==='/'){let j=i;while(j<src.length&&src[j]!=='\n'&&src[j]!=='\r')j++;add('COMMENT',src.slice(i,j),sl,sc);col+=j-i;i=j;continue;}
+    if(lang==='py'&&ch==='#'){let j=i;while(j<src.length&&src[j]!=='\n'&&src[j]!=='\r')j++;add('COMMENT',src.slice(i,j),sl,sc);col+=j-i;i=j;continue;}
+    if(lang==='c'&&ch==='#'){let j=i;while(j<src.length){if(src[j]==='\\'){j+=2;}else if(src[j]==='\n'||src[j]==='\r')break;else j++;}add('PREPROCESSOR',src.slice(i,j),sl,sc);col+=j-i;i=j;continue;}
+    if(lang==='py'&&(src.slice(i,i+3)==='"""'||src.slice(i,i+3)==="'''")){const q3=src.slice(i,i+3);let j=i+3;while(j<src.length-2&&src.slice(j,j+3)!==q3){if(src[j]==='\n'){line++;col=1;}else col++;j++;}j+=3;add('STRING',src.slice(i,j),sl,sc);col+=3;i=j;continue;}
+    if(ch==='"'||ch==="'"){const q=ch;let j=i+1,s=q;while(j<src.length&&src[j]!==q&&src[j]!=='\n'&&src[j]!=='\r'){if(src[j]==='\\'){s+=src[j]+src[j+1];j+=2;}else{s+=src[j];j++;}}if(j<src.length&&src[j]===q){s+=q;j++;}add('STRING',s,sl,sc);col+=j-i;i=j;continue;}
+    if(/[0-9]/.test(ch)||(ch==='.'&&/[0-9]/.test(src[i+1]||''))){let j=i,isF=false;if(src[j]==='0'&&/[xX]/.test(src[j+1])){j+=2;while(j<src.length&&/[0-9a-fA-F]/.test(src[j]))j++;}else{while(j<src.length&&/[0-9]/.test(src[j]))j++;if(j<src.length&&src[j]==='.'&&/[0-9]/.test(src[j+1]||'')){isF=true;j++;while(j<src.length&&/[0-9]/.test(src[j]))j++;}if(j<src.length&&/[eE]/.test(src[j])){isF=true;j++;if(/[+\-]/.test(src[j]))j++;while(j<src.length&&/[0-9]/.test(src[j]))j++;}while(j<src.length&&/[uUlLfF]/.test(src[j])){if(/[fF]/.test(src[j]))isF=true;j++;}}add(isF?'FLOAT':'INTEGER',src.slice(i,j),sl,sc);col+=j-i;i=j;continue;}
+    if(/[a-zA-Z_]/.test(ch)){let j=i;while(j<src.length&&/[a-zA-Z0-9_]/.test(src[j]))j++;const w=src.slice(i,j);add(KW.has(w)?'KEYWORD':'IDENTIFIER',w,sl,sc);col+=j-i;i=j;continue;}
+    const t3=src.slice(i,i+3);if(['<<=','>>=','...'].includes(t3)){add('OPERATOR',t3,sl,sc);col+=3;i+=3;continue;}
+    const t2=src.slice(i,i+2);if(['==','!=','<=','>=','&&','||','++','--','+=','-=','*=','/=','%=','&=','|=','^=','->','**','>>','<<','::'].includes(t2)){add('OPERATOR',t2,sl,sc);col+=2;i+=2;continue;}
+    if('+-*/%=<>!&|^~'.includes(ch)){add('OPERATOR',ch,sl,sc);col++;i++;continue;}
+    if('(){}[];:,.\\_@'.includes(ch)){add('DELIMITER',ch,sl,sc);col++;i++;continue;}
+    add('UNKNOWN',ch,sl,sc);col++;i++;
+  }
+  return{tokens,lang};
+}
+
+/* ══════════════════════════════════════════════
+   PHASE 2 — PARSER
+══════════════════════════════════════════════ */
+let _nodeId=0;
+function N(type,children=[],label=null,tok=null){return{type,children,label,tok,collapsed:false,id:(_nodeId++).toString()};}
+class PErr extends Error{constructor(m,t){super(m);this.tok=t;}}
+
+class Parser{
+  constructor(tokens,lang){this.toks=tokens.filter(t=>t.type!=='COMMENT'&&!(t.type==='PREPROCESSOR'));this.prep=tokens.filter(t=>t.type==='PREPROCESSOR');this.pos=0;this.lang=lang;this.errors=[];}
+  peek(o=0){return this.toks[this.pos+o]||{type:'EOF',value:'<EOF>',line:0,col:0};}
+  consume(){return this.toks[this.pos++]||{type:'EOF',value:'<EOF>',line:0,col:0};}
+  match(...vals){const t=this.peek();if(vals.includes(t.value)||vals.includes(t.type)){this.consume();return t;}return null;}
+  expect(type,val){const t=this.peek();if(t.value===val||t.type===type)return this.consume();this.errors.push(`Line ${t.line}: expected '${val||type}' got '${t.value}'`);return t;}
+  isEOF(){return this.pos>=this.toks.length;}
+  safe(fn){try{return fn();}catch(e){if(e instanceof PErr)this.errors.push(`Line ${e.tok?.line||'?'}: ${e.message}`);else this.errors.push(e.message);if(!this.isEOF())this.consume();return null;}}
+  parseProgram(){const root=N('Program',[]);for(const p of this.prep)root.children.push(N('Preprocessor',[],p.value,p));while(!this.isEOF()){const s=this.safe(()=>this.lang==='c'?this.cStmt():this.pyStmt());if(s)root.children.push(s);}return root;}
+  cStmt(){const t=this.peek();if(t.type==='EOF'||t.value==='}')return null;if(t.value===';'){this.consume();return null;}const C_TYPES=['int','float','char','double','void','unsigned','signed','long','short','static','const','struct','inline','extern'];if(t.type==='KEYWORD'&&C_TYPES.includes(t.value))return this.cDeclOrFunc();if(t.value==='if')return this.cIf();if(t.value==='while')return this.cWhile();if(t.value==='for')return this.cFor();if(t.value==='return')return this.cReturn();if(t.value==='break'||t.value==='continue'){const k=this.consume();this.match(';');return N(k.value==='break'?'BreakStatement':'ContinueStatement',[],null,k);}if(t.value==='{')return this.cBlock();const ex=this.cExpr();this.match(';');return N('ExpressionStatement',[ex]);}
+  cType(){const parts=[];const Q=['const','unsigned','signed','long','short','static','volatile','inline','extern','struct','enum','union'];const T=['int','float','char','double','void'];while(Q.includes(this.peek().value)||T.includes(this.peek().value))parts.push(this.consume().value);while(this.peek().value==='*')parts.push(this.consume().value);return N('TypeSpecifier',[],parts.join(' ')||'auto');}
+  cDeclOrFunc(){const typeNode=this.cType();const name=this.peek();if(name.type!=='IDENTIFIER'){this.errors.push(`Line ${name.line}: expected identifier after type`);return typeNode;}this.consume();if(this.peek().value==='('){const params=this.cParamList();if(this.peek().value==='{'){const body=this.cBlock();return N('FunctionDefinition',[typeNode,N('FunctionName',[],name.value,name),params,body],null,name);}this.match(';');return N('ExpressionStatement',[N('CallExpression',[N('Identifier',[],name.value,name),params])]);}const decl=N('VariableDeclaration',[typeNode,N('Identifier',[],name.value,name)],null,name);if(this.peek().value==='='){this.consume();decl.children.push(N('Initializer',[this.cExpr()]));}while(this.peek().value===','){this.consume();const e=this.peek();if(e.type==='IDENTIFIER'){this.consume();decl.children.push(N('Identifier',[],e.value,e));if(this.peek().value==='='){this.consume();decl.children.push(N('Initializer',[this.cExpr()]));}}}this.match(';');return decl;}
+  cParamList(){const node=N('ParameterList',[]);this.expect('DELIMITER','(');while(this.peek().value!==')'&&this.peek().type!=='EOF'){const C_TYPES=['int','float','char','double','void','unsigned','signed','long','short','const'];if(C_TYPES.includes(this.peek().value)){const t=this.cType();const nm=this.peek();if(nm.type==='IDENTIFIER'){this.consume();node.children.push(N('Parameter',[t,N('Identifier',[],nm.value,nm)]));}else node.children.push(N('Parameter',[t]));}else node.children.push(this.cExpr());if(this.peek().value!==',')break;this.consume();}this.expect('DELIMITER',')');return node;}
+  cBlock(){const node=N('Block',[]);this.expect('DELIMITER','{');while(this.peek().value!=='}'&&!this.isEOF()){const s=this.safe(()=>this.cStmt());if(s)node.children.push(s);}this.expect('DELIMITER','}');return node;}
+  cIf(){const tok=this.consume();const n=N('IfStatement',[],null,tok);this.expect('DELIMITER','(');n.children.push(N('Condition',[this.cExpr()]));this.expect('DELIMITER',')');n.children.push(N('Then',[this.cBlock()]));if(this.peek().value==='else'){this.consume();n.children.push(N('Else',[this.peek().value==='if'?this.cIf():this.cBlock()]));}return n;}
+  cWhile(){const tok=this.consume();const n=N('WhileStatement',[],null,tok);this.expect('DELIMITER','(');n.children.push(N('Condition',[this.cExpr()]));this.expect('DELIMITER',')');n.children.push(N('Body',[this.cBlock()]));return n;}
+  cFor(){const tok=this.consume();const n=N('ForStatement',[],null,tok);this.expect('DELIMITER','(');const C_TYPES=['int','float','char','double'];if(this.peek().value!==';'){if(C_TYPES.includes(this.peek().value)){n.children.push(N('Init',[this.cDeclOrFunc()]));}else{n.children.push(N('Init',[this.cExpr()]));this.match(';');}}else{this.consume();n.children.push(N('Init',[]));};if(this.peek().value!==';')n.children.push(N('Condition',[this.cExpr()]));else n.children.push(N('Condition',[]));this.match(';');if(this.peek().value!==')')n.children.push(N('Update',[this.cExpr()]));else n.children.push(N('Update',[]));this.expect('DELIMITER',')');n.children.push(N('Body',[this.cBlock()]));return n;}
+  cReturn(){const tok=this.consume();const n=N('ReturnStatement',[],null,tok);if(this.peek().value!==';'&&!this.isEOF())n.children.push(this.cExpr());this.match(';');return n;}
+  cExpr(mp=0){let l=this.cUnary();const PREC={'||':1,'&&':2,'|':3,'^':4,'&':5,'==':6,'!=':6,'<':7,'>':7,'<=':7,'>=':7,'<<':8,'>>':8,'+':9,'-':9,'*':10,'/':10,'%':10};const ASGN=['=','+=','-=','*=','/=','%=','&=','|=','^=','<<=','>>='];while(true){const op=this.peek();if(ASGN.includes(op.value)){this.consume();const r=this.cExpr(0);l=N('AssignmentExpression',[l,N('Operator',[],op.value,op),r],null,op);continue;}const p=PREC[op.value];if(p===undefined||p<=mp)break;this.consume();const r=this.cExpr(p);l=N('BinaryExpression',[l,N('Operator',[],op.value,op),r],null,op);}return l;}
+  cUnary(){const t=this.peek();if(['!','~','-','+','*','&'].includes(t.value)){this.consume();return N('UnaryExpression',[N('Operator',[],t.value,t),this.cUnary()],null,t);}if(['++','--'].includes(t.value)){this.consume();return N('PrefixExpression',[N('Operator',[],t.value,t),this.cUnary()],null,t);}return this.cPostfix();}
+  cPostfix(){let n=this.cPrimary();while(true){if(this.peek().value==='('){const a=N('Arguments',[]);this.expect('DELIMITER','(');while(this.peek().value!==')'&&this.peek().type!=='EOF'){a.children.push(this.cExpr());if(this.peek().value!==',')break;this.consume();}this.expect('DELIMITER',')');n=N('CallExpression',[n,a]);}else if(this.peek().value==='['){this.consume();const idx=this.cExpr();this.expect('DELIMITER',']');n=N('IndexExpression',[n,idx]);}else if(['++','--'].includes(this.peek().value)){const op=this.consume();n=N('PostfixExpression',[n,N('Operator',[],op.value,op)]);}else if(this.peek().value==='.'||this.peek().value==='->'){const op=this.consume();const m=this.consume();n=N('MemberExpression',[n,N('Operator',[],op.value,op),N('Identifier',[],m.value,m)]);}else break;}return n;}
+  cPrimary(){const t=this.peek();if(t.value==='('){this.consume();const e=this.cExpr();this.expect('DELIMITER',')');return N('GroupExpression',[e]);}if(t.type==='INTEGER'){this.consume();return N('IntegerLiteral',[],t.value,t);}if(t.type==='FLOAT'){this.consume();return N('FloatLiteral',[],t.value,t);}if(t.type==='STRING'){this.consume();return N('StringLiteral',[],t.value,t);}if(t.type==='IDENTIFIER'||t.type==='KEYWORD'){this.consume();return N('Identifier',[],t.value,t);}this.consume();return N('Unknown',[],t.value,t);}
+  pyStmt(){const t=this.peek();if(t.type==='EOF')return null;if(t.value==='def')return this.pyFuncDef();if(t.value==='class')return this.pyClassDef();if(t.value==='if')return this.pyIf();if(t.value==='while')return this.pyWhile();if(t.value==='for')return this.pyFor();if(t.value==='return')return this.pyReturn();if(t.value==='import')return this.pyImport();if(t.value==='from')return this.pyFromImport();if(['pass','break','continue'].includes(t.value)){const k=this.consume();return N(k.value==='pass'?'PassStatement':k.value==='break'?'BreakStatement':'ContinueStatement',[],null,k);}return this.pyExprStmt();}
+  pyBlock(){const s=[];let safe=0;while(!this.isEOF()&&safe++<300){const r=this.safe(()=>this.pyStmt());if(r)s.push(r);else break;}return s;}
+  pyFuncDef(){const tok=this.consume();const nm=this.consume();const n=N('FunctionDefinition',[N('FunctionName',[],nm.value,nm)],null,tok);this.expect('DELIMITER','(');const pl=N('ParameterList',[]);while(this.peek().value!==')'&&this.peek().type!=='EOF'){const p=this.consume();const param=N('Parameter',[N('Identifier',[],p.value,p)]);if(this.peek().value==='='){this.consume();param.children.push(N('Default',[this.pyExpr()]));}pl.children.push(param);if(this.peek().value!==',')break;this.consume();}this.expect('DELIMITER',')');if(this.peek().value==='->'){this.consume();pl.children.push(N('ReturnType',[this.pyExpr()]));}n.children.push(pl);this.expect('DELIMITER',':');n.children.push(N('Body',this.pyBlock()));return n;}
+  pyClassDef(){const tok=this.consume();const nm=this.consume();const n=N('ClassDefinition',[N('ClassName',[],nm.value,nm)],null,tok);if(this.peek().value==='('){this.consume();const b=N('BaseClasses',[]);while(this.peek().value!==')'&&this.peek().type!=='EOF'){const bc=this.consume();b.children.push(N('BaseClass',[],bc.value,bc));if(this.peek().value!==',')break;this.consume();}this.expect('DELIMITER',')');n.children.push(b);}this.expect('DELIMITER',':');n.children.push(N('Body',this.pyBlock()));return n;}
+  pyIf(){const tok=this.consume();const n=N('IfStatement',[],null,tok);n.children.push(N('Condition',[this.pyExpr()]));this.expect('DELIMITER',':');n.children.push(N('Then',this.pyBlock()));while(this.peek().value==='elif'){const et=this.consume();const ec=N('ElifClause',[],null,et);ec.children.push(N('Condition',[this.pyExpr()]));this.expect('DELIMITER',':');ec.children.push(N('Body',this.pyBlock()));n.children.push(ec);}if(this.peek().value==='else'){this.consume();this.expect('DELIMITER',':');n.children.push(N('Else',this.pyBlock()));}return n;}
+  pyWhile(){const tok=this.consume();const n=N('WhileStatement',[],null,tok);n.children.push(N('Condition',[this.pyExpr()]));this.expect('DELIMITER',':');n.children.push(N('Body',this.pyBlock()));return n;}
+  pyFor(){const tok=this.consume();const n=N('ForStatement',[],null,tok);const tgt=this.consume();n.children.push(N('Target',[],tgt.value,tgt));this.expect('KEYWORD','in');n.children.push(N('Iterable',[this.pyExpr()]));this.expect('DELIMITER',':');n.children.push(N('Body',this.pyBlock()));return n;}
+  pyReturn(){const tok=this.consume();const n=N('ReturnStatement',[],null,tok);if(!this.isEOF()&&this.peek().value!==':'&&this.peek().type!=='EOF')n.children.push(this.pyExpr());return n;}
+  pyImport(){const tok=this.consume();const n=N('ImportStatement',[],null,tok);while(!this.isEOF()){const m=this.consume();const im=N('Module',[],m.value,m);if(this.peek().value==='as'){this.consume();const al=this.consume();im.children.push(N('Alias',[],al.value,al));}n.children.push(im);if(this.peek().value!==',')break;this.consume();}return n;}
+  pyFromImport(){const tok=this.consume();const mod=this.consume();const n=N('FromImportStatement',[N('Module',[],mod.value,mod)],null,tok);this.expect('KEYWORD','import');if(this.peek().value==='*'){this.consume();n.children.push(N('Star',[],null));}else{while(!this.isEOF()){const nm=this.consume();const im=N('Name',[],nm.value,nm);if(this.peek().value==='as'){this.consume();const al=this.consume();im.children.push(N('Alias',[],al.value,al));}n.children.push(im);if(this.peek().value!==',')break;this.consume();}}return n;}
+  pyExprStmt(){const l=this.pyExpr();if(['=','+=','-=','*=','/=','%=','**='].includes(this.peek().value)){const op=this.consume();const r=this.pyExpr();return N('AssignmentStatement',[l,N('Operator',[],op.value,op),r],null,op);}return N('ExpressionStatement',[l]);}
+  pyExpr(mp=0){let l=this.pyUnary();const P={'or':1,'and':2,'in':3,'not':3,'is':3,'<':4,'>':4,'==':4,'!=':4,'<=':4,'>=':4,'+':5,'-':5,'*':6,'/':6,'//':6,'%':6,'**':7};while(true){const op=this.peek();const p=P[op.value];if(p===undefined||p<=mp)break;this.consume();const r=this.pyExpr(p);l=N('BinaryExpression',[l,N('Operator',[],op.value,op),r],null,op);}return l;}
+  pyUnary(){const t=this.peek();if(['-','+','not','~'].includes(t.value)){this.consume();return N('UnaryExpression',[N('Operator',[],t.value,t),this.pyUnary()],null,t);}return this.pyPostfix();}
+  pyPostfix(){let n=this.pyPrimary();while(true){if(this.peek().value==='('){const a=N('Arguments',[]);this.expect('DELIMITER','(');while(this.peek().value!==')'&&this.peek().type!=='EOF'){if(this.peek().type==='IDENTIFIER'&&this.toks[this.pos+1]?.value==='='){const k=this.consume();this.consume();a.children.push(N('KeywordArg',[N('Identifier',[],k.value,k),this.pyExpr()]));}else a.children.push(this.pyExpr());if(this.peek().value!==',')break;this.consume();}this.expect('DELIMITER',')');n=N('CallExpression',[n,a]);}else if(this.peek().value==='['){this.consume();const idx=this.pyExpr();this.expect('DELIMITER',']');n=N('IndexExpression',[n,idx]);}else if(this.peek().value==='.'){this.consume();const m=this.consume();n=N('AttributeAccess',[n,N('Identifier',[],m.value,m)]);}else break;}return n;}
+  pyPrimary(){const t=this.peek();if(t.value==='('){this.consume();if(this.peek().value===')'){this.consume();return N('Tuple',[]);}const e=this.pyExpr();if(this.peek().value===','){const tp=N('Tuple',[e]);while(this.peek().value===','&&this.peek(1).value!==')'){this.consume();tp.children.push(this.pyExpr());}this.match(',');this.expect('DELIMITER',')');return tp;}this.expect('DELIMITER',')');return N('GroupExpression',[e]);}if(t.value==='['){this.consume();const l=N('ListLiteral',[]);while(this.peek().value!==']'&&this.peek().type!=='EOF'){l.children.push(this.pyExpr());if(this.peek().value!==',')break;this.consume();}this.expect('DELIMITER',']');return l;}if(t.value==='{'){this.consume();const d=N('DictLiteral',[]);while(this.peek().value!=='}'&&this.peek().type!=='EOF'){const k=this.pyExpr();this.expect('DELIMITER',':');const v=this.pyExpr();d.children.push(N('KVPair',[k,v]));if(this.peek().value!==',')break;this.consume();}this.expect('DELIMITER','}');return d;}if(t.type==='INTEGER'){this.consume();return N('IntegerLiteral',[],t.value,t);}if(t.type==='FLOAT'){this.consume();return N('FloatLiteral',[],t.value,t);}if(t.type==='STRING'){this.consume();return N('StringLiteral',[],t.value,t);}if(t.type==='KEYWORD'&&['True','False','None'].includes(t.value)){this.consume();return N('BoolLiteral',[],t.value,t);}if(t.type==='IDENTIFIER'||t.type==='KEYWORD'){this.consume();return N('Identifier',[],t.value,t);}this.consume();return N('Unknown',[],t.value,t);}
+}
+
+/* ══════════════════════════════════════════════
+   PHASE 3 — SEMANTIC
+══════════════════════════════════════════════ */
+class SymbolTable{
+  constructor(){this.scopes=[{name:'global',symbols:{}}];this.allSymbols=[];}
+  push(name){this.scopes.push({name,symbols:{}});}
+  pop(){return this.scopes.pop();}
+  top(){return this.scopes[this.scopes.length-1];}
+  scopeName(){return this.top().name;}
+  declare(name,kind,type,tok){const scope=this.top();if(scope.symbols[name]){return{redecl:true,prev:scope.symbols[name]};}const entry={name,kind,type,scope:scope.name,line:tok?.line??0,used:false,tok};scope.symbols[name]=entry;this.allSymbols.push(entry);return{redecl:false,entry};}
+  lookup(name){for(let i=this.scopes.length-1;i>=0;i--){if(this.scopes[i].symbols[name])return this.scopes[i].symbols[name];}return null;}
+  markUsed(name){const s=this.lookup(name);if(s)s.used=true;}
+  getUnused(){return this.allSymbols.filter(s=>!s.used&&s.kind!=='function'&&s.kind!=='parameter');}
+}
+class SemanticAnalyzer{
+  constructor(lang){this.lang=lang;this.sym=new SymbolTable();this.errors=[];this.warnings=[];this.typeMap={};this.currentFuncReturn=null;this.hasReturn=false;const builtins=lang==='c'?['printf','scanf','malloc','free','strlen','strcpy','strcmp','memcpy','exit','abs','sqrt','pow','fopen','fclose']:['print','len','range','type','int','float','str','bool','list','dict','tuple','set','input','open','enumerate','zip','map','filter','sorted','sum','min','max','abs','round'];for(const b of builtins){this.sym.declare(b,'function','builtin',null);const e=this.sym.lookup(b);if(e)e.used=true;}}
+  err(msg,tok){this.errors.push({msg,line:tok?.line??'?',col:tok?.col??'?'});}
+  warn(msg,tok){this.warnings.push({msg,line:tok?.line??'?',col:tok?.col??'?'});}
+  setType(node,type){if(node)this.typeMap[node.id]=type;}
+  getType(node){return node?this.typeMap[node.id]||'unknown':'unknown';}
+  inferLiteral(node){if(node.type==='IntegerLiteral')return 'int';if(node.type==='FloatLiteral')return 'float';if(node.type==='StringLiteral')return 'string';if(node.type==='BoolLiteral')return node.label==='None'?'null':'bool';return 'unknown';}
+  parseCType(typeStr){if(!typeStr)return 'unknown';const s=typeStr.trim();if(s.includes('float')||s.includes('double'))return 'float';if(s.includes('char'))return 'char';if(s.includes('void'))return 'void';if(s.includes('int')||s.includes('long')||s.includes('short'))return 'int';return 'unknown';}
+  analyze(node){if(!node)return 'unknown';switch(node.type){case 'Program':return this.aProgram(node);case 'FunctionDefinition':return this.aFuncDef(node);case 'VariableDeclaration':return this.aVarDecl(node);case 'AssignmentExpression':case 'AssignmentStatement':return this.aAssign(node);case 'IfStatement':return this.aIf(node);case 'WhileStatement':return this.aWhile(node);case 'ForStatement':return this.aFor(node);case 'ReturnStatement':return this.aReturn(node);case 'BinaryExpression':return this.aBinary(node);case 'UnaryExpression':return this.aUnary(node);case 'CallExpression':return this.aCall(node);case 'Identifier':return this.aIdent(node);case 'IntegerLiteral':case 'FloatLiteral':case 'StringLiteral':case 'BoolLiteral':{const t=this.inferLiteral(node);this.setType(node,t);return t;}case 'Block':case 'Body':case 'Then':case 'Else':case 'ElifClause':case 'ExpressionStatement':case 'GroupExpression':case 'Preprocessor':case 'ImportStatement':case 'FromImportStatement':case 'ClassDefinition':node.children?.forEach(c=>this.analyze(c));return 'void';case 'Condition':if(node.children[0]){const ct=this.analyze(node.children[0]);this.setType(node,ct);}return 'bool';case 'Initializer':if(node.children[0]){const it=this.analyze(node.children[0]);this.setType(node,it);return it;}return 'unknown';case 'ListLiteral':{let et='unknown';node.children.forEach(c=>{et=this.analyze(c);});this.setType(node,`list<${et}>`);return `list<${et}>`;}case 'DictLiteral':{node.children.forEach(c=>this.analyze(c));this.setType(node,'dict');return 'dict';}case 'Tuple':{node.children.forEach(c=>this.analyze(c));this.setType(node,'tuple');return 'tuple';}default:node.children?.forEach(c=>this.analyze(c));return 'unknown';}}
+  aProgram(node){node.children.forEach(c=>this.analyze(c));for(const s of this.sym.getUnused()){this.warn(`Variable '${s.name}' declared but never used`,s.tok);}return 'void';}
+  aFuncDef(node){const nameNode=node.children.find(c=>c.type==='FunctionName');const typeNode=node.children.find(c=>c.type==='TypeSpecifier');const paramsNode=node.children.find(c=>c.type==='ParameterList');const bodyNode=node.children.find(c=>c.type==='Block'||c.type==='Body');const name=nameNode?.label||'?';const retType=this.lang==='c'?this.parseCType(typeNode?.label):'unknown';const paramTypes=[];if(paramsNode){paramsNode.children.forEach(p=>{const pt=p.children?.find(c=>c.type==='TypeSpecifier');paramTypes.push(this.parseCType(pt?.label)||'unknown');});}const res=this.sym.declare(name,'function',{ret:retType,params:paramTypes},nameNode?.tok||node.tok);if(res.redecl)this.err(`Function '${name}' already declared`,nameNode?.tok||node.tok);this.sym.push(name);if(paramsNode){paramsNode.children.forEach(p=>{const pname=p.children?.find(c=>c.type==='Identifier')?.label;const ptype=p.children?.find(c=>c.type==='TypeSpecifier');if(pname){const pr=this.sym.declare(pname,'parameter',this.lang==='c'?this.parseCType(ptype?.label):'unknown',p.tok);pr.entry&&(pr.entry.used=true);}});}const prevRet=this.currentFuncReturn;const prevHas=this.hasReturn;this.currentFuncReturn=retType;this.hasReturn=false;if(bodyNode)this.analyze(bodyNode);if(this.lang==='c'&&retType!=='void'&&!this.hasReturn){this.warn(`Function '${name}' may not return a value`,nameNode?.tok||node.tok);}this.currentFuncReturn=prevRet;this.hasReturn=prevHas;this.sym.pop();this.setType(node,retType);return retType;}
+  aVarDecl(node){const typeNode=node.children.find(c=>c.type==='TypeSpecifier');const identNode=node.children.find(c=>c.type==='Identifier');const initNode=node.children.find(c=>c.type==='Initializer');const name=identNode?.label||'?';const declType=this.lang==='c'?this.parseCType(typeNode?.label):'unknown';const res=this.sym.declare(name,'variable',declType,identNode?.tok||node.tok);if(res.redecl)this.err(`Variable '${name}' already declared in this scope`,identNode?.tok||node.tok);if(initNode){const initType=this.analyze(initNode);if(this.lang==='c'&&declType!=='unknown'&&initType!=='unknown'&&declType!==initType){if(!(declType==='float'&&initType==='int')){this.warn(`Type mismatch: '${name}' declared as '${declType}' but initialised with '${initType}'`,identNode?.tok||node.tok);}}if(res.entry)res.entry.type=declType!=='unknown'?declType:initType;}this.setType(node,declType);return declType;}
+  aAssign(node){const left=node.children[0];const right=node.children[2];const lt=this.analyze(left);const rt=this.analyze(right);if(lt!=='unknown'&&rt!=='unknown'&&lt!==rt){if(!(lt==='float'&&rt==='int'))this.warn(`Assignment type mismatch: '${lt}' = '${rt}'`,node.tok);}if(right?.type==='BinaryExpression'){const op=right.children.find(c=>c.type==='Operator');const rr=right.children[2];if((op?.label==='/'||op?.label==='%')&&rr?.type==='IntegerLiteral'&&rr?.label==='0'){this.err(`Division by zero detected`,op?.tok||node.tok);}}this.setType(node,lt);return lt;}
+  aIf(node){node.children.forEach(c=>this.analyze(c));return 'void';}
+  aWhile(node){node.children.forEach(c=>this.analyze(c));return 'void';}
+  aFor(node){if(this.lang==='py'){const tgt=node.children.find(c=>c.type==='Target');if(tgt?.label){const r=this.sym.declare(tgt.label,'variable','unknown',tgt.tok);if(r.entry)r.entry.used=true;}}node.children.forEach(c=>this.analyze(c));return 'void';}
+  aReturn(node){this.hasReturn=true;const valNode=node.children[0];const retType=valNode?this.analyze(valNode):'void';this.setType(node,retType);if(this.currentFuncReturn&&this.currentFuncReturn!=='unknown'){if(retType!=='unknown'&&retType!==this.currentFuncReturn){if(!(this.currentFuncReturn==='float'&&retType==='int')){this.warn(`Return type mismatch: function expects '${this.currentFuncReturn}' but returns '${retType}'`,node.tok);}}}return retType;}
+  aBinary(node){const left=node.children[0];const opNode=node.children[1];const right=node.children[2];const lt=this.analyze(left);const rt=this.analyze(right);const op=opNode?.label;if((op==='/'||op==='%')&&right?.type==='IntegerLiteral'&&right?.label==='0'){this.err(`Division by zero detected (... ${op} 0)`,opNode?.tok||node.tok);}let resultType='unknown';const CMP=['==','!=','<','>','<=','>=','&&','||','and','or','not','in','is'];if(CMP.includes(op))resultType='bool';else if(lt==='float'||rt==='float')resultType='float';else if(lt==='int'&&rt==='int')resultType='int';else if(lt==='string'&&op==='+')resultType='string';else if(lt!=='unknown')resultType=lt;this.setType(node,resultType);return resultType;}
+  aUnary(node){const op=node.children[0];const operand=node.children[1];const t=this.analyze(operand);this.setType(node,t);return t;}
+  aCall(node){const callee=node.children[0];const argsNode=node.children[1];const name=callee?.label||'?';const sym=this.sym.lookup(name);if(!sym&&name!=='?'){this.err(`Undeclared function or variable '${name}' called`,callee?.tok||node.tok);}else if(sym){this.sym.markUsed(name);if(sym.kind==='function'&&sym.type&&sym.type!=='builtin'&&argsNode){const expectedLen=sym.type.params?.length??-1;const actualArgs=argsNode.children?.length??0;if(expectedLen>=0&&actualArgs!==expectedLen){this.err(`Function '${name}' expects ${expectedLen} argument(s) but got ${actualArgs}`,callee?.tok||node.tok);}}}argsNode?.children?.forEach(a=>this.analyze(a));const retType=sym?.type?.ret??'unknown';this.setType(node,retType);return retType;}
+  aIdent(node){const name=node.label||'?';if(name==='?')return 'unknown';const sym=this.sym.lookup(name);if(!sym){this.err(`Use of undeclared identifier '${name}'`,node.tok);}else{this.sym.markUsed(name);}const type=sym?.type??'unknown';const t=typeof type==='object'?'function':type;this.setType(node,t);return t;}
+}
+
+/* ══════════════════════════════════════════════
+   PHASE 4 — INTERMEDIATE CODE GENERATOR
+══════════════════════════════════════════════ */
+class ICGInstruction {
+  constructor(op,arg1=null,arg2=null,result=null,label=null,comment=null){
+    this.op=op;this.arg1=arg1;this.arg2=arg2;this.result=result;
+    this.label=label;this.comment=comment;
+    this.isTemp=result&&String(result).startsWith('_t');
+  }
+}
+
+class IntermediateCodeGenerator {
+  constructor(lang){this.lang=lang;this.instructions=[];this.tempCount=0;this.labelCount=0;this.currentFunc=null;}
+  newTemp(){return `_t${++this.tempCount}`;}
+  newLabel(){return `L${++this.labelCount}`;}
+  emit(op,arg1=null,arg2=null,result=null,label=null,comment=null){const i=new ICGInstruction(op,arg1,arg2,result,label,comment);this.instructions.push(i);return i;}
+  emitLabel(name,comment=null){this.emit('LABEL',null,null,null,name,comment);}
+  generate(node){
+    if(!node)return null;
+    switch(node.type){
+      case 'Program':return this.gProgram(node);
+      case 'FunctionDefinition':return this.gFuncDef(node);
+      case 'VariableDeclaration':return this.gVarDecl(node);
+      case 'AssignmentExpression':case 'AssignmentStatement':return this.gAssign(node);
+      case 'IfStatement':return this.gIf(node);
+      case 'WhileStatement':return this.gWhile(node);
+      case 'ForStatement':return this.gFor(node);
+      case 'ReturnStatement':return this.gReturn(node);
+      case 'BinaryExpression':return this.gBinary(node);
+      case 'UnaryExpression':return this.gUnary(node);
+      case 'CallExpression':return this.gCall(node);
+      case 'Identifier':return node.label||'_unknown';
+      case 'IntegerLiteral':case 'FloatLiteral':return node.label||'0';
+      case 'StringLiteral':return node.label||'""';
+      case 'BoolLiteral':return node.label||'false';
+      case 'Block':case 'Body':case 'Then':case 'Else':
+        node.children?.forEach(c=>this.generate(c));return null;
+      case 'ExpressionStatement':
+        if(node.children[0])this.generate(node.children[0]);return null;
+      case 'Initializer':return node.children[0]?this.generate(node.children[0]):'0';
+      case 'GroupExpression':return node.children[0]?this.generate(node.children[0]):null;
+      case 'ElifClause':node.children?.forEach(c=>this.generate(c));return null;
+      case 'BreakStatement':if(this._loopEndLabel)this.emit('GOTO',null,null,null,null,null);return null;
+      case 'ContinueStatement':if(this._loopStartLabel)this.emit('GOTO',null,null,null,null,null);return null;
+      default:node.children?.forEach(c=>this.generate(c));return null;
+    }
+  }
+  gProgram(node){this.emit('NOP',null,null,null,null,'-- program start --');node.children.forEach(c=>{if(c.type!=='Preprocessor')this.generate(c);});this.emit('HALT',null,null,null,null,'-- program end --');return null;}
+  gFuncDef(node){const nameNode=node.children.find(c=>c.type==='FunctionName');const paramsNode=node.children.find(c=>c.type==='ParameterList');const bodyNode=node.children.find(c=>c.type==='Block'||c.type==='Body');const name=nameNode?.label||'?';const prevFunc=this.currentFunc;this.currentFunc=name;this.emit('FUNC_BEGIN',name,null,null,name,`function ${name}`);if(paramsNode){paramsNode.children.forEach(p=>{const pname=p.children?.find(c=>c.type==='Identifier')?.label;if(pname)this.emit('PARAM_DECL',pname,null,pname,null,`param ${pname}`);});}if(bodyNode)this.generate(bodyNode);this.emit('FUNC_END',name,null,null,null,`end ${name}`);this.currentFunc=prevFunc;return null;}
+  gVarDecl(node){const identNode=node.children.find(c=>c.type==='Identifier');const initNode=node.children.find(c=>c.type==='Initializer');const name=identNode?.label||'_?';if(initNode){const val=this.generate(initNode);this.emit('ASSIGN',val,null,name,null,`declare ${name}`);}else{this.emit('ASSIGN','0',null,name,null,`declare ${name} (uninit)`);}return name;}
+  gAssign(node){const left=node.children[0];const right=node.children[2];const target=left?.label||this.generate(left);const val=this.generate(right);const opNode=node.children[1];const op=opNode?.label||'=';if(op!=='='){const opMap={'+=':'ADD','-=':'SUB','*=':'MUL','/=':'DIV','%=':'MOD'};const tacOp=opMap[op]||'ADD';const tmp=this.newTemp();this.emit(tacOp,target,val,tmp);this.emit('ASSIGN',tmp,null,target);}else{this.emit('ASSIGN',val,null,target);}return target;}
+  gBinary(node){const left=node.children[0];const opNode=node.children[1];const right=node.children[2];const l=this.generate(left);const r=this.generate(right);const op=opNode?.label||'+';const opMap={'+':'ADD','-':'SUB','*':'MUL','/':'DIV','%':'MOD','==':'EQ','!=':'NEQ','<':'LT','>':'GT','<=':'LEQ','>=':'GEQ','&&':'AND','||':'OR','and':'AND','or':'OR','**':'POW','//':'IDIV','<<':'SHL','>>':'SHR','&':'BAND','|':'BOR','^':'BXOR'};const tacOp=opMap[op]||'ADD';const tmp=this.newTemp();this.emit(tacOp,l,r,tmp);return tmp;}
+  gUnary(node){const opNode=node.children[0];const operand=node.children[1];const val=this.generate(operand);const op=opNode?.label||'-';const tmp=this.newTemp();if(op==='-'||op==='~'){this.emit('NEG',val,null,tmp);}else if(op==='!'||op==='not'){this.emit('NOT',val,null,tmp);}else{this.emit('ASSIGN',val,null,tmp);}return tmp;}
+  gIf(node){const condNode=node.children.find(c=>c.type==='Condition');const thenNode=node.children.find(c=>c.type==='Then');const elseNode=node.children.find(c=>c.type==='Else');const hasElse=!!elseNode;const lElse=this.newLabel();const lEnd=this.newLabel();const cond=condNode?.children[0]?this.generate(condNode.children[0]):'_cond';this.emit('IF_FALSE',cond,null,hasElse?lElse:lEnd);if(thenNode)this.generate(thenNode);if(hasElse){this.emit('GOTO',null,null,lEnd);this.emitLabel(lElse,'else branch');this.generate(elseNode);}this.emitLabel(lEnd,'end if');return null;}
+  gWhile(node){const condNode=node.children.find(c=>c.type==='Condition');const bodyNode=node.children.find(c=>c.type==='Body');const lStart=this.newLabel();const lEnd=this.newLabel();const prevStart=this._loopStartLabel;const prevEnd=this._loopEndLabel;this._loopStartLabel=lStart;this._loopEndLabel=lEnd;this.emitLabel(lStart,'while start');const cond=condNode?.children[0]?this.generate(condNode.children[0]):'_cond';this.emit('IF_FALSE',cond,null,lEnd);if(bodyNode)this.generate(bodyNode);this.emit('GOTO',null,null,lStart);this.emitLabel(lEnd,'while end');this._loopStartLabel=prevStart;this._loopEndLabel=prevEnd;return null;}
+  gFor(node){if(this.lang==='c'){const initNode=node.children.find(c=>c.type==='Init');const condNode=node.children.find(c=>c.type==='Condition');const updateNode=node.children.find(c=>c.type==='Update');const bodyNode=node.children.find(c=>c.type==='Body');const lStart=this.newLabel();const lEnd=this.newLabel();const prevStart=this._loopStartLabel;const prevEnd=this._loopEndLabel;this._loopStartLabel=lStart;this._loopEndLabel=lEnd;if(initNode?.children[0])this.generate(initNode.children[0]);this.emitLabel(lStart,'for start');if(condNode?.children[0]){const cond=this.generate(condNode.children[0]);this.emit('IF_FALSE',cond,null,lEnd);}if(bodyNode)this.generate(bodyNode);if(updateNode?.children[0])this.generate(updateNode.children[0]);this.emit('GOTO',null,null,lStart);this.emitLabel(lEnd,'for end');this._loopStartLabel=prevStart;this._loopEndLabel=prevEnd;}else{const targetNode=node.children.find(c=>c.type==='Target');const iterNode=node.children.find(c=>c.type==='Iterable');const bodyNode=node.children.find(c=>c.type==='Body');const lStart=this.newLabel();const lEnd=this.newLabel();const iterTmp=this.newTemp();const idxTmp=this.newTemp();const lenTmp=this.newTemp();const target=targetNode?.label||'_i';const iterVal=iterNode?.children[0]?this.generate(iterNode.children[0]):'_iter';this.emit('ASSIGN',iterVal,null,iterTmp,null,'iter source');this.emit('ASSIGN','0',null,idxTmp,null,'iter index');this.emit('CALL','len',null,lenTmp,null,'iter length');this.emitLabel(lStart,'for start');const condTmp=this.newTemp();this.emit('LT',idxTmp,lenTmp,condTmp);this.emit('IF_FALSE',condTmp,null,lEnd);this.emit('INDEX',iterTmp,idxTmp,target,null,'get element');if(bodyNode)this.generate(bodyNode);const idxNext=this.newTemp();this.emit('ADD',idxTmp,'1',idxNext);this.emit('ASSIGN',idxNext,null,idxTmp);this.emit('GOTO',null,null,lStart);this.emitLabel(lEnd,'for end');}return null;}
+  gReturn(node){const valNode=node.children[0];const val=valNode?this.generate(valNode):'void';this.emit('RETURN',val,null,null,null,`return from ${this.currentFunc||'?'}`);return null;}
+  gCall(node){const calleeNode=node.children[0];const argsNode=node.children[1];const name=calleeNode?.label||'?';const args=[];if(argsNode){argsNode.children.forEach(a=>{const v=this.generate(a);if(v!==null)args.push(v);});}args.forEach(a=>this.emit('PARAM',a,null,null,null));const tmp=this.newTemp();this.emit('CALL',name,String(args.length),tmp,null,`call ${name}(${args.join(',')})`);return tmp;}
+}
+
+/* ══════════════════════════════════════════════
+   ICG OPTIMIZERS (constant folding + DCE)
+══════════════════════════════════════════════ */
+function constantFold(instructions){
+  const foldedIdxs=new Set();const constMap={};
+  const numVal=(s)=>{if(s===null||s===undefined)return NaN;if(constMap[s]!==undefined)return constMap[s];const n=Number(s);return isNaN(n)?NaN:n;};
+  const result=instructions.map((instr,idx)=>{
+    const clone=Object.assign(Object.create(Object.getPrototypeOf(instr)),instr);
+    if(['ADD','SUB','MUL','DIV','MOD','POW','IDIV'].includes(instr.op)){
+      const a=numVal(instr.arg1),b=numVal(instr.arg2);
+      if(!isNaN(a)&&!isNaN(b)){
+        let v;
+        if(instr.op==='ADD')v=a+b;else if(instr.op==='SUB')v=a-b;else if(instr.op==='MUL')v=a*b;
+        else if(instr.op==='DIV')v=b!==0?a/b:NaN;else if(instr.op==='MOD')v=b!==0?a%b:NaN;
+        else if(instr.op==='POW')v=Math.pow(a,b);else if(instr.op==='IDIV')v=b!==0?Math.trunc(a/b):NaN;
+        if(!isNaN(v)){constMap[instr.result]=v;clone.op='ASSIGN';clone.arg1=String(Number.isInteger(v)?v:v.toFixed(6));clone.arg2=null;clone.comment=`⚡ folded: ${instr.arg1} ${instr.op} ${instr.arg2} = ${clone.arg1}`;foldedIdxs.add(idx);}
+      }
+    }else if(instr.op==='ASSIGN'){const v=numVal(instr.arg1);if(!isNaN(v)&&instr.result)constMap[instr.result]=v;}
+    else if(instr.op==='NEG'){const a=numVal(instr.arg1);if(!isNaN(a)){constMap[instr.result]=-a;clone.op='ASSIGN';clone.arg1=String(-a);clone.arg2=null;clone.comment=`⚡ folded: NEG ${instr.arg1} = ${-a}`;foldedIdxs.add(idx);}}
+    return clone;
+  });
+  return{instructions:result,foldedCount:foldedIdxs.size};
+}
+
+function deadCodeElimination(instructions){
+  const used=new Set();
+  instructions.forEach(i=>{
+    if(i.arg1&&String(i.arg1).startsWith('_t'))used.add(i.arg1);
+    if(i.arg2&&String(i.arg2).startsWith('_t'))used.add(i.arg2);
+    if(i.result&&!String(i.result).startsWith('_t'))used.add(i.result);
+    if(i.op==='IF_TRUE'||i.op==='IF_FALSE')used.add(i.arg1);
+    if(i.op==='RETURN')used.add(i.arg1);
+    if(i.op==='PARAM')used.add(i.arg1);
+  });
+  const eliminated=[];
+  const kept=instructions.filter((i,idx)=>{
+    if(i.result&&String(i.result).startsWith('_t')&&!used.has(i.result)){if(i.op!=='CALL'){eliminated.push(idx);return false;}}
+    return true;
+  });
+  return{instructions:kept,eliminatedCount:eliminated.length};
+}
+
+/* ══════════════════════════════════════════════
+   CFG BUILDER + RENDERER
+══════════════════════════════════════════════ */
+function buildCFG(instructions){
+  const leaders=new Set([0]);const labelIdx={};
+  instructions.forEach((instr,i)=>{if(instr.label)labelIdx[instr.label]=i;});
+  instructions.forEach((instr,i)=>{
+    if(['GOTO','IF_TRUE','IF_FALSE'].includes(instr.op)){const target=instr.result;if(target&&labelIdx[target]!==undefined)leaders.add(labelIdx[target]);if(i+1<instructions.length)leaders.add(i+1);}
+    if(instr.op==='FUNC_BEGIN'||instr.op==='FUNC_END')leaders.add(i);
+    if(instr.op==='LABEL')leaders.add(i);
+  });
+  const sortedLeaders=[...leaders].sort((a,b)=>a-b);
+  const blocks=[];
+  sortedLeaders.forEach((start,bi)=>{
+    const end=bi+1<sortedLeaders.length?sortedLeaders[bi+1]:instructions.length;
+    const block={id:`B${bi}`,start,end,instrs:instructions.slice(start,end),succs:[],label:null,funcName:null};
+    const first=instructions[start];if(first?.label)block.label=first.label;if(first?.op==='FUNC_BEGIN')block.funcName=first.arg1;
+    blocks.push(block);
+  });
+  const instrToBlock={};blocks.forEach((bl,bi)=>{for(let i=bl.start;i<bl.end;i++)instrToBlock[i]=bi;});
+  blocks.forEach((bl,bi)=>{
+    const last=instructions[bl.end-1];if(!last)return;
+    if(last.op==='GOTO'){const target=last.result;if(target&&labelIdx[target]!==undefined){const tb=instrToBlock[labelIdx[target]];if(tb!==undefined)bl.succs.push(tb);}}
+    else if(last.op==='IF_TRUE'||last.op==='IF_FALSE'){const target=last.result;if(target&&labelIdx[target]!==undefined){const tb=instrToBlock[labelIdx[target]];if(tb!==undefined)bl.succs.push(tb);}if(bi+1<blocks.length)bl.succs.push(bi+1);}
+    else if(last.op==='RETURN'||last.op==='HALT'||last.op==='FUNC_END'){}
+    else{if(bi+1<blocks.length)bl.succs.push(bi+1);}
+    bl.succs=[...new Set(bl.succs)];
+  });
+  return blocks;
+}
+
+function renderCFGSVG(blocks){
+  if(!blocks.length)return '<div class="empty-row" style="padding:60px 0;">No CFG data.</div>';
+  const BW=200,BH_BASE=28,LINE_H=14;const HGAP=60,VGAP=50;const COLS=Math.min(4,blocks.length);
+  blocks.forEach((bl,i)=>{bl._col=i%COLS;bl._row=Math.floor(i/COLS);});
+  const maxRow=Math.max(...blocks.map(b=>b._row));
+  const SVG_W=COLS*(BW+HGAP)+40;const SVG_H=(maxRow+1)*(BH_BASE+60+VGAP)+60;
+  blocks.forEach(bl=>{const lineCount=Math.min(bl.instrs.length,5);bl._h=BH_BASE+lineCount*LINE_H;bl._x=20+bl._col*(BW+HGAP);bl._y=30+bl._row*(BH_BASE+60+VGAP);});
+  const BLOCK_COLORS={'FUNC_BEGIN':'#0d1f3a','FUNC_END':'#0d1f3a','LABEL':'#0c1a0d','default':'#0b0e15'};
+  const BLOCK_STROKES={'FUNC_BEGIN':'#00c2ff','FUNC_END':'#00c2ff','LABEL':'#34d399','default':'#1f2840'};
+  let svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${SVG_W}" height="${SVG_H}" style="font-family:'JetBrains Mono',monospace;">`;
+  svg+=`<defs><marker id="cfgar" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="5" markerHeight="5" orient="auto"><path d="M1 1L7 4L1 7" fill="none" stroke="#2a3550" stroke-width="1.5" stroke-linecap="round"/></marker></defs>`;
+  blocks.forEach((bl,bi)=>{bl.succs.forEach((si,eidx)=>{const tgt=blocks[si];if(!tgt)return;const x1=bl._x+BW/2,y1=bl._y+bl._h,x2=tgt._x+BW/2,y2=tgt._y;const isBranch=bl.succs.length>1;const color=isBranch?(eidx===0?'#f87171':'#34d399'):'#1e3a5f';const my=(y1+y2)/2;if(bl._row===tgt._row&&bl._col!==tgt._col){const midY=bl._y+bl._h+16;svg+=`<path d="M${x1},${y1} L${x1},${midY} L${x2},${midY} L${x2},${y2}" fill="none" stroke="${color}" stroke-width="1" marker-end="url(#cfgar)" stroke-dasharray="${isBranch?'5,3':'none'}"/>`;}else{svg+=`<path d="M${x1},${y1} C${x1},${my} ${x2},${my} ${x2},${y2}" fill="none" stroke="${color}" stroke-width="1" marker-end="url(#cfgar)" stroke-dasharray="${isBranch?'5,3':'none'}"/>"`;}if(isBranch){const lbl=eidx===0?'F':'T';const lclr=eidx===0?'#f87171':'#34d399';svg+=`<text x="${(x1+x2)/2-4}" y="${(y1+y2)/2}" font-size="9" fill="${lclr}" font-weight="700">${lbl}</text>`;}});});
+  blocks.forEach((bl,bi)=>{const firstOp=bl.instrs[0]?.op||'default';const bg=BLOCK_COLORS[firstOp]||BLOCK_COLORS.default;const stroke=BLOCK_STROKES[firstOp]||BLOCK_STROKES.default;const isFunc=firstOp==='FUNC_BEGIN';svg+=`<g>`;svg+=`<rect x="${bl._x+2}" y="${bl._y+2}" width="${BW}" height="${bl._h}" rx="7" fill="rgba(0,0,0,.4)"/>`;svg+=`<rect x="${bl._x}" y="${bl._y}" width="${BW}" height="${bl._h}" rx="7" fill="${bg}" stroke="${stroke}" stroke-width="${isFunc?1.5:0.8}"/>`;const badgeClr=isFunc?'#00c2ff':bl.instrs[0]?.op==='FUNC_END'?'#00c2ff':'#34d399';const badgeLabel=isFunc?bl.instrs[0]?.arg1||bl.id:bl.label||bl.id;svg+=`<rect x="${bl._x+5}" y="${bl._y+4}" width="${Math.min(badgeLabel.length*6+10,BW-10)}" height="13" rx="3" fill="${badgeClr}22"/>`;svg+=`<text x="${bl._x+10}" y="${bl._y+14}" font-size="9" fill="${badgeClr}" font-weight="700">${esc(badgeLabel)}</text>`;const preview=bl.instrs.slice(0,5);preview.forEach((instr,li)=>{const y=bl._y+BH_BASE+li*LINE_H;const opClr=instr.op==='RETURN'?'#f87171':instr.op==='CALL'?'#34d399':instr.op.startsWith('IF')?'#f59e0b':'#8bafc8';let txt=instr.op;if(instr.arg1)txt+=` ${instr.arg1}`;if(instr.arg2)txt+=` ${instr.arg2}`;if(instr.result&&instr.op!=='IF_TRUE'&&instr.op!=='IF_FALSE'&&instr.op!=='GOTO')txt+=` → ${instr.result}`;if(txt.length>22)txt=txt.slice(0,21)+'…';svg+=`<text x="${bl._x+8}" y="${y+10}" font-size="9" fill="${opClr}">${esc(txt)}</text>`;});if(bl.instrs.length>5)svg+=`<text x="${bl._x+8}" y="${bl._y+BH_BASE+5*LINE_H+10}" font-size="8" fill="#3d4f68">+${bl.instrs.length-5} more…</text>`;svg+=`</g>`;});
+  svg+=`</svg>`;return svg;
+}
+
+/* ══════════════════════════════════════════════
+   PARSE TREE RENDERER
+══════════════════════════════════════════════ */
+const NW=128,NH=38,HG=16,VG=52;
+const NODE_BG={Program:'#091828',FunctionDefinition:'#130d2e',FunctionName:'#1a0f38',ParameterList:'#0f1526',Parameter:'#0f1526',Block:'#071520',IfStatement:'#1e0e00',Condition:'#261000',Then:'#0c1a00',Else:'#1a0015',ElifClause:'#1e0e00',WhileStatement:'#001525',ForStatement:'#001525',Body:'#071520',Init:'#071520',Update:'#071520',ReturnStatement:'#1a0a14',BreakStatement:'#1a0a14',ContinueStatement:'#1a0a14',PassStatement:'#1a0a14',BinaryExpression:'#041818',AssignmentExpression:'#041818',AssignmentStatement:'#041818',UnaryExpression:'#041818',CallExpression:'#0a1808',Arguments:'#081508',Identifier:'#0a1018',IntegerLiteral:'#061510',FloatLiteral:'#061510',StringLiteral:'#150c00',BoolLiteral:'#061510',TypeSpecifier:'#14002a',VariableDeclaration:'#14002a',Operator:'#180500',Preprocessor:'#001515'};
+const NODE_STROKE={Program:'#00c2ff',FunctionDefinition:'#a78bfa',FunctionName:'#a78bfa',IfStatement:'#fb923c',Condition:'#fb923c',Then:'#34d399',Else:'#f472b6',ElifClause:'#fb923c',WhileStatement:'#00c2ff',ForStatement:'#00c2ff',ReturnStatement:'#f87171',BreakStatement:'#f87171',ContinueStatement:'#f87171',PassStatement:'#f87171',BinaryExpression:'#2dd4bf',AssignmentExpression:'#2dd4bf',AssignmentStatement:'#2dd4bf',CallExpression:'#34d399',Identifier:'#3d4f68',IntegerLiteral:'#34d399',FloatLiteral:'#34d399',StringLiteral:'#fb923c',TypeSpecifier:'#a78bfa',VariableDeclaration:'#a78bfa',Operator:'#f472b6',Preprocessor:'#67e8f9'};
+const NODE_TC={Program:'#5ae8ff',FunctionDefinition:'#c4b5fd',FunctionName:'#c4b5fd',IfStatement:'#fdba74',Condition:'#fdba74',Then:'#6ee7b7',Else:'#f9a8d4',ElifClause:'#fdba74',WhileStatement:'#7dd3fc',ForStatement:'#7dd3fc',ReturnStatement:'#fca5a5',BinaryExpression:'#5eead4',AssignmentExpression:'#5eead4',AssignmentStatement:'#5eead4',CallExpression:'#86efac',Identifier:'#64748b',IntegerLiteral:'#6ee7b7',FloatLiteral:'#6ee7b7',StringLiteral:'#fdba74',TypeSpecifier:'#c4b5fd',VariableDeclaration:'#c4b5fd',Operator:'#f9a8d4',Preprocessor:'#a5f3fc'};
+let treeRoot=null,treeView='svg';
+function cDesc(n){if(!n.children)return 0;return n.children.length+n.children.reduce((s,c)=>s+cDesc(c),0);}
+function compLayout(n){if(n.collapsed||!n.children||!n.children.length){n.sw=NW;return;}let tw=0;for(const c of n.children){compLayout(c);tw+=c.sw+HG;}tw-=HG;n.sw=Math.max(NW,tw);}
+function assignPos(n,x,y){n.x=x+(n.sw-NW)/2;n.y=y;if(n.collapsed||!n.children||!n.children.length)return;let cx=x;for(const c of n.children){assignPos(c,cx,y+NH+VG);cx+=c.sw+HG;}}
+function buildSVG(root){compLayout(root);assignPos(root,40,40);let mx=0,my=0;function bnd(n){mx=Math.max(mx,(n.x||0)+NW);my=Math.max(my,(n.y||0)+NH);if(!n.collapsed&&n.children)n.children.forEach(bnd);}bnd(root);const W=mx+60,H=my+60;let s=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" style="font-family:'JetBrains Mono',monospace;">`;s+=`<defs><marker id="ar" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="5" markerHeight="5" orient="auto"><path d="M1 1L7 4L1 7" fill="none" stroke="#1e3a5f" stroke-width="1.5" stroke-linecap="round"/></marker></defs>`;function edges(n){if(n.collapsed||!n.children)return;for(const c of n.children){const x1=n.x+NW/2,y1=n.y+NH,x2=c.x+NW/2,y2=c.y,my=(y1+y2)/2;s+=`<path d="M${x1},${y1} C${x1},${my} ${x2},${my} ${x2},${y2}" fill="none" stroke="#1a2d45" stroke-width="1" marker-end="url(#ar)"/>`;edges(c);}}edges(root);function drawN(n){const bg=NODE_BG[n.type]||'#0a0f18',brd=NODE_STROKE[n.type]||'#1e2d40',tc=NODE_TC[n.type]||'#64748b';const hasC=n.children&&n.children.length>0;let top=n.type,bot=n.label?String(n.label):'';if(bot.length>15)bot=bot.slice(0,14)+'…';s+=`<g style="cursor:${hasC?'pointer':'default'}" onclick="toggleN('${n.id}')">`;s+=`<rect x="${n.x+2}" y="${n.y+2}" width="${NW}" height="${NH}" rx="6" fill="rgba(0,0,0,.35)"/>`;s+=`<rect x="${n.x}" y="${n.y}" width="${NW}" height="${NH}" rx="6" fill="${bg}" stroke="${brd}" stroke-width="${n.type==='Program'?1.5:.8}"/>`;if(hasC){const sym=n.collapsed?'+':'−';s+=`<rect x="${n.x+NW-15}" y="${n.y+5}" width="11" height="11" rx="3" fill="rgba(255,255,255,.05)" stroke="${brd}" stroke-width=".5"/>`;s+=`<text x="${n.x+NW-9.5}" y="${n.y+13}" text-anchor="middle" font-size="9" fill="${brd}" font-weight="700">${sym}</text>`;}if(!hasC)s+=`<circle cx="${n.x+7}" cy="${n.y+NH/2}" r="2.5" fill="${brd}" opacity=".6"/>`;if(bot){s+=`<text x="${n.x+NW/2}" y="${n.y+13}" text-anchor="middle" font-size="8.5" fill="${tc}" font-weight="700" letter-spacing=".5">${esc(top)}</text>`;s+=`<text x="${n.x+NW/2}" y="${n.y+27}" text-anchor="middle" font-size="10" fill="#b8d4e8">${esc(bot)}</text>`;}else{s+=`<text x="${n.x+NW/2}" y="${n.y+22}" text-anchor="middle" font-size="10" fill="${tc}" font-weight="600">${esc(top)}</text>`;}if(n.collapsed&&hasC){s+=`<rect x="${n.x+NW/2-14}" y="${n.y+NH-5}" width="28" height="13" rx="6.5" fill="${brd}"/>`;s+=`<text x="${n.x+NW/2}" y="${n.y+NH+4.5}" text-anchor="middle" font-size="8.5" fill="#07090f" font-weight="700">${cDesc(n)} ▾</text>`;}s+=`</g>`;if(!n.collapsed&&n.children)n.children.forEach(drawN);}drawN(root);s+=`</svg>`;return s;}
+function findN(root,id){if(root.id===id)return root;if(!root.children)return null;for(const c of root.children){const f=findN(c,id);if(f)return f;}return null;}
+function toggleN(id){if(!treeRoot)return;const n=findN(treeRoot,id);if(n&&n.children?.length){n.collapsed=!n.collapsed;redraw();}}
+function expandAll(){if(!treeRoot)return;function ex(n){n.collapsed=false;n.children?.forEach(ex);}ex(treeRoot);redraw();}
+function collapseAll(){if(!treeRoot)return;function co(n){if(n.children?.length)n.collapsed=true;n.children?.forEach(co);}treeRoot.children?.forEach(co);redraw();}
+function treeText(n,pre,cp){const lbl=n.label?` "${n.label}"`:'';const loc=n.tok?` [${n.tok.line}:${n.tok.col}]`:'';let o=pre+n.type+lbl+loc+'\n';if(n.collapsed){o+=cp+'  … collapsed\n';return o;}if(n.children)for(let i=0;i<n.children.length;i++){const l=i===n.children.length-1;o+=treeText(n.children[i],cp+(l?'└─ ':'├─ '),cp+(l?'   ':'│  '));}return o;}
+function redraw(){if(!treeRoot)return;if(treeView==='svg'){document.getElementById('tree-wrap').innerHTML=buildSVG(treeRoot);document.getElementById('text-tree').style.display='none';document.getElementById('tree-wrap').style.display='block';}else{document.getElementById('text-tree').textContent=treeText(treeRoot,'','');document.getElementById('text-tree').style.display='block';document.getElementById('tree-wrap').style.display='none';}}
+function switchTreeView(v){treeView=v;document.getElementById('vb-svg').classList.toggle('on',v==='svg');document.getElementById('vb-txt').classList.toggle('on',v==='txt');redraw();}
+
+/* ══════════════════════════════════════════════
+   UI RENDERERS (phases 1-3)
+══════════════════════════════════════════════ */
+function renderTokens(tokens){const counts={};for(const t of tokens)counts[t.type]=(counts[t.type]||0)+1;document.getElementById('tok-sum').innerHTML=Object.entries(counts).map(([k,v])=>`<span class="tk ${esc(k)}">${esc(k)} <b>${v}</b></span>`).join('')||'';document.getElementById('tok-count').textContent=`${tokens.length} tokens`;const tb=document.getElementById('tok-tb');if(!tokens.length){tb.innerHTML='<tr><td colspan="5" class="empty-row">No tokens.</td></tr>';return;}tb.innerHTML=tokens.map((t,i)=>`<tr><td class="mono">${i+1}</td><td><span class="tk ${esc(t.type)}">${esc(t.type)}</span></td><td class="mono">${esc(t.value)}</td><td class="mono">${t.line}</td><td class="mono">${t.col}</td></tr>`).join('');}
+function renderSymbolTable(symbols){const tb=document.getElementById('sym-tb');const display=symbols.filter(s=>s.kind!=='function'||!['printf','scanf','print','len','range','type','int','float','str','bool','list','dict','tuple','set','input','open','enumerate','zip','map','filter','sorted','sum','min','max','abs','round'].includes(s.name));if(!display.length){tb.innerHTML='<tr><td colspan="6" class="empty-row">No symbols.</td></tr>';return;}tb.innerHTML=display.map(s=>{const sc=s.scope==='global'?'scope-global':s.scope.includes('main')||s.scope.includes('add')||s.scope.includes('def')?'scope-func':'scope-local';const typeStr=typeof s.type==='object'?(s.type.ret?`fn→${s.type.ret}`:JSON.stringify(s.type)):String(s.type||'?');return `<tr><td class="mono">${esc(s.name)}</td><td><span class="sym-kind">${esc(s.kind)}</span></td><td class="sym-type">${esc(typeStr)}</td><td><span class="sym-scope ${sc}">${esc(s.scope)}</span></td><td class="mono">${s.line||'—'}</td><td><span class="sym-used ${s.used?'yes':'no'}" title="${s.used?'used':'unused'}"></span></td></tr>`;}).join('');}
+function renderTypeList(typeMap,allNodes){const el=document.getElementById('type-list');const interesting=['BinaryExpression','CallExpression','AssignmentExpression','AssignmentStatement','VariableDeclaration','ReturnStatement'];const items=allNodes.filter(n=>interesting.includes(n.type)&&typeMap[n.id]&&typeMap[n.id]!=='unknown');if(!items.length){el.innerHTML='<div style="color:var(--muted);font-size:11px;font-family:var(--mono);">No type info available.</div>';return;}el.innerHTML=items.slice(0,16).map(n=>{const t=typeMap[n.id];const cls=t==='int'?'ty-int':t==='float'?'ty-float':t==='string'?'ty-str':t==='void'?'ty-void':t==='bool'?'ty-bool':t.startsWith('fn')?'ty-func':'ty-unknown';const label=n.label?`${n.type} "${n.label}"`:n.type;return `<div class="ti-row"><span class="ti-name">${esc(label)}</span><span class="ti-type ${cls}">${esc(t)}</span></div>`;}).join('');}
+function renderDiagnostics(errors,warnings,parseErrors){const el=document.getElementById('diag-list');const all=[];for(const e of parseErrors)all.push({kind:'SYNTAX',msg:e,line:'?',isErr:true});for(const e of errors)all.push({kind:'ERROR',msg:e.msg,line:e.line,col:e.col,isErr:true});for(const w of warnings)all.push({kind:'WARNING',msg:w.msg,line:w.line,col:w.col,isErr:false});if(!all.length){el.innerHTML=`<div class="diag diag-ok"><div class="diag-head"><span class="diag-icon">✅</span><span class="diag-kind kind-ok">ALL CLEAR</span></div><div class="diag-msg">No errors or warnings detected.</div></div>`;return;}el.innerHTML=all.map(d=>{const cls=d.isErr?'diag-err':'diag-warn';const kcls=d.isErr?'kind-err':'kind-warn';const icon=d.isErr?'❌':'⚠️';const loc=d.line&&d.line!=='?'?`<div class="diag-loc">Line ${d.line}${d.col?':'+d.col:''}</div>`:'';return `<div class="diag ${cls}"><div class="diag-head"><span class="diag-icon">${icon}</span><span class="diag-kind ${kcls}">${esc(d.kind)}</span></div><div class="diag-msg">${esc(d.msg)}</div>${loc}</div>`;}).join('');}
+function renderSummary(errors,warnings,parseErrors){const ec=errors.length+parseErrors.length,wc=warnings.length;const ok=ec===0&&wc===0;document.getElementById('sem-summary').innerHTML=`<div class="sum-chip ${ok?'sum-ok':'sum-err'}"><span class="sum-num">${ec}</span> Error${ec!==1?'s':''}</div><div class="sum-chip sum-warn"><span class="sum-num">${wc}</span> Warning${wc!==1?'s':''}</div><div class="sum-chip sum-ok" style="${ok?'':'opacity:.4'}"><span>✓</span> ${ok?'Semantically valid':'Needs attention'}</div>`;}
+function flatNodes(n,acc=[]){acc.push(n);if(n.children)n.children.forEach(c=>flatNodes(c,acc));return acc;}
+
+/* ══════════════════════════════════════════════
+   ICG RENDERERS
+══════════════════════════════════════════════ */
+let _cachedTAC=[];
+function tacArgClass(val){if(!val||val==='null')return '';const s=String(val);if(s.startsWith('_t'))return 'is-temp';if(/^-?[0-9.]+$/.test(s))return 'is-lit';if(/^L\d+$/.test(s))return 'is-label';return '';}
+
+function renderTAC(instructions){
+  _cachedTAC=instructions;
+  const tb=document.getElementById('tac-tb');
+  const OP_STYLE={'FUNC_BEGIN':'color:#00c2ff;font-weight:700','FUNC_END':'color:#00c2ff;font-weight:700','RETURN':'color:#f87171;font-weight:700','CALL':'color:#34d399;font-weight:700','GOTO':'color:#f59e0b;font-weight:700','IF_TRUE':'color:#f59e0b;font-weight:700','IF_FALSE':'color:#f59e0b;font-weight:700','LABEL':'color:#f59e0b;font-weight:700','HALT':'color:#f87171;font-weight:700','ASSIGN':'color:#c4b5fd','NOP':'color:#3d4f68'};
+  let instrNum=0;let rows='';
+  instructions.forEach((instr,i)=>{
+    if(instr.op==='FUNC_BEGIN'){rows+=`<tr class="tac-sep"><td colspan="6">── function: ${esc(instr.arg1||'')} ──</td></tr>`;}
+    const isFuncOp=instr.op==='FUNC_BEGIN'||instr.op==='FUNC_END'||instr.op==='LABEL'||instr.op==='NOP'||instr.op==='HALT';
+    const num=isFuncOp?'':String(++instrNum);
+    const opStyle=OP_STYLE[instr.op]||'color:#f472b6';
+    const labelCell=instr.label&&instr.op!=='FUNC_BEGIN'?`<span class="tac-label">${esc(instr.label)}:</span>`:'';
+    const a1cls=tacArgClass(instr.arg1);const a2cls=tacArgClass(instr.arg2);const rescls=instr.result&&String(instr.result).startsWith('_t')?'is-temp':'';
+    rows+=`<tr><td class="tac-lno">${num}</td><td class="mono">${labelCell}</td><td><span class="tac-op" style="${opStyle}">${esc(instr.op)}</span></td><td><span class="tac-arg ${a1cls}">${esc(instr.arg1??'')}</span></td><td><span class="tac-arg ${a2cls}">${esc(instr.arg2??'')}</span></td><td><span class="tac-result ${rescls}">${esc(instr.result??'')}</span>${instr.comment?`<span class="tac-comment">  // ${esc(instr.comment)}</span>`:''}</td></tr>`;
+  });
+  tb.innerHTML=rows||'<tr><td colspan="6" class="empty-row">No instructions.</td></tr>';
+  const temps=new Set(instructions.filter(i=>i.result&&String(i.result).startsWith('_t')).map(i=>i.result));
+  const labels=new Set(instructions.filter(i=>i.label).map(i=>i.label));
+  const funcs=instructions.filter(i=>i.op==='FUNC_BEGIN').length;
+  const realInstrs=instructions.filter(i=>!['LABEL','NOP','FUNC_BEGIN','FUNC_END','HALT'].includes(i.op)).length;
+  document.getElementById('stat-instrs').textContent=realInstrs;
+  document.getElementById('stat-temps').textContent=temps.size;
+  document.getElementById('stat-labels').textContent=labels.size;
+  document.getElementById('stat-funcs').textContent=funcs;
+  const codeEl=document.getElementById('tac-text-code');
+  codeEl.innerHTML=buildTACText(instructions).map(l=>colorTACLine(l)).join('\n');
+}
+
+function buildTACText(instructions){
+  const lines=[];
+  instructions.forEach(instr=>{
+    let line='';
+    if(instr.op==='LABEL')line=`${instr.label}:`;
+    else if(instr.op==='FUNC_BEGIN')line=`\nfunc ${instr.arg1}:`;
+    else if(instr.op==='FUNC_END')line=`end_func ${instr.arg1||''}`;
+    else if(instr.op==='NOP')line=`  // nop`;
+    else if(instr.op==='HALT')line=`  halt`;
+    else if(instr.op==='ASSIGN')line=`  ${instr.result} = ${instr.arg1}`;
+    else if(instr.op==='PARAM')line=`  param ${instr.arg1}`;
+    else if(instr.op==='PARAM_DECL')line=`  // param ${instr.arg1}`;
+    else if(instr.op==='CALL')line=`  ${instr.result} = call ${instr.arg1}, ${instr.arg2}`;
+    else if(instr.op==='RETURN')line=`  return ${instr.arg1||''}`;
+    else if(instr.op==='GOTO')line=`  goto ${instr.result}`;
+    else if(instr.op==='IF_TRUE')line=`  if ${instr.arg1} goto ${instr.result}`;
+    else if(instr.op==='IF_FALSE')line=`  ifFalse ${instr.arg1} goto ${instr.result}`;
+    else if(instr.op==='NEG')line=`  ${instr.result} = -${instr.arg1}`;
+    else if(instr.op==='NOT')line=`  ${instr.result} = !${instr.arg1}`;
+    else if(instr.op==='INDEX')line=`  ${instr.result} = ${instr.arg1}[${instr.arg2}]`;
+    else{const opSyms={ADD:'+',SUB:'-',MUL:'*',DIV:'/',MOD:'%',EQ:'==',NEQ:'!=',LT:'<',GT:'>',LEQ:'<=',GEQ:'>=',AND:'&&',OR:'||',POW:'**',IDIV:'//',SHL:'<<',SHR:'>>',BAND:'&',BOR:'|',BXOR:'^'};const sym=opSyms[instr.op]||instr.op;line=`  ${instr.result} = ${instr.arg1} ${sym} ${instr.arg2}`;}
+    if(instr.comment&&!instr.comment.startsWith('--'))line+=`  // ${instr.comment}`;
+    lines.push(line);
+  });
+  return lines;
+}
+
+function colorTACLine(line){
+  return line
+    .replace(/\b(func|end_func|halt|return|goto|if|ifFalse|call|param)\b/g,'<span class="kw">$1</span>')
+    .replace(/(\bL\d+\b)/g,'<span class="lbl">$1</span>')
+    .replace(/(_t\d+)/g,'<span class="tmp">$1</span>')
+    .replace(/(\/\/.*)/g,'<span class="cm">$1</span>')
+    .replace(/\b(\d+\.?\d*)\b/g,'<span class="lit">$1</span>')
+    .replace(/\b([a-z_][a-z0-9_]*)(?=\s*\()/gi,'<span class="fn">$1</span>');
+}
+
+function renderOptimised(folded,dce){
+  const foldLines=buildTACText(folded.instructions);
+  document.getElementById('opt-code').innerHTML=foldLines.map(l=>colorTACLine(l)).join('\n');
+  document.getElementById('opt-fold-count').textContent=`${folded.foldedCount} constant(s) folded`;
+  const dceLines=buildTACText(dce.instructions);
+  document.getElementById('dce-code').innerHTML=dceLines.map(l=>colorTACLine(l)).join('\n');
+  document.getElementById('opt-elim-count').textContent=`${dce.eliminatedCount} dead instruction(s) removed`;
+  document.getElementById('stat-orig').textContent=folded.instructions.length;
+  document.getElementById('stat-folded').textContent=folded.foldedCount;
+  document.getElementById('stat-eliminated').textContent=dce.eliminatedCount;
+  document.getElementById('stat-final').textContent=dce.instructions.length;
+}
+
+function renderCFG(instructions){
+  const blocks=buildCFG(instructions);
+  const wrap=document.getElementById('cfg-wrap');
+  wrap.innerHTML=renderCFGSVG(blocks);
+  const edges=blocks.reduce((s,b)=>s+b.succs.length,0);
+  document.getElementById('cfg-info').textContent=`${blocks.length} basic blocks · ${edges} edges`;
+}
+
+function copyTAC(){const text=buildTACText(_cachedTAC).join('\n');navigator.clipboard?.writeText(text).then(()=>{const btn=document.getElementById('copy-tac-btn');btn.textContent='Copied!';setTimeout(()=>btn.textContent='Copy',1500);});}
+function copyTACText(){copyTAC();}
+
+/* ══════════════════════════════════════════════
+   PHASE 5 — CODE OPTIMIZATION PASSES
+══════════════════════════════════════════════ */
+
+/* ── 1. Common Subexpression Elimination (CSE) ── */
+function commonSubexpressionElimination(instructions) {
+  const BINARY_OPS = new Set(['ADD','SUB','MUL','DIV','MOD','AND','OR','EQ','NEQ','LT','GT','LEQ','GEQ','POW','IDIV','SHL','SHR','BAND','BOR','BXOR']);
+  const exprMap = {};     // key "OP:a1:a2" -> first result var
+  const replaced = new Set();
+  const result = instructions.map((instr, idx) => {
+    const clone = Object.assign(Object.create(Object.getPrototypeOf(instr)), instr);
+    if (BINARY_OPS.has(instr.op) && instr.arg1 != null && instr.arg2 != null) {
+      // Commutative key (ADD a b == ADD b a)
+      const comm = ['ADD','MUL','AND','OR','EQ','NEQ','BAND','BOR','BXOR'];
+      let key;
+      if (comm.includes(instr.op) && String(instr.arg1) > String(instr.arg2)) {
+        key = `${instr.op}:${instr.arg2}:${instr.arg1}`;
+      } else {
+        key = `${instr.op}:${instr.arg1}:${instr.arg2}`;
+      }
+      if (exprMap[key]) {
+        // Replace this instruction with ASSIGN from cached temp
+        clone.op = 'ASSIGN';
+        clone.arg1 = exprMap[key];
+        clone.arg2 = null;
+        clone.comment = `♻ CSE: reuse ${exprMap[key]} for ${instr.op}(${instr.arg1},${instr.arg2})`;
+        replaced.add(idx);
+      } else {
+        exprMap[key] = instr.result;
+      }
+      // Invalidate cache if result overwrites an arg
+      Object.keys(exprMap).forEach(k => {
+        const parts = k.split(':');
+        if (parts[1] === instr.result || parts[2] === instr.result) delete exprMap[k];
+      });
+    } else if (instr.op === 'ASSIGN' && instr.result) {
+      // Writing to a var invalidates CSE entries that used it as arg
+      Object.keys(exprMap).forEach(k => {
+        const parts = k.split(':');
+        if (parts[1] === instr.result || parts[2] === instr.result) delete exprMap[k];
+      });
+    }
+    return clone;
+  });
+  return { instructions: result, foundCount: replaced.size, eliminatedCount: replaced.size };
+}
+
+/* ── 2. Copy Propagation ── */
+function copyPropagation(instructions) {
+  const copyMap = {};   // var -> canonical var/literal
+  let propagations = 0;
+  let copyStmts = 0;
+
+  function resolve(v) {
+    if (v == null) return v;
+    let cur = String(v);
+    const seen = new Set();
+    while (copyMap[cur] && !seen.has(cur)) { seen.add(cur); cur = copyMap[cur]; }
+    return cur;
+  }
+
+  const result = instructions.map((instr, idx) => {
+    const clone = Object.assign(Object.create(Object.getPrototypeOf(instr)), instr);
+    // Propagate into uses
+    let changed = false;
+    if (instr.arg1 != null) {
+      const r = resolve(String(instr.arg1));
+      if (r !== String(instr.arg1)) { clone.arg1 = r; changed = true; propagations++; }
+    }
+    if (instr.arg2 != null) {
+      const r = resolve(String(instr.arg2));
+      if (r !== String(instr.arg2)) { clone.arg2 = r; changed = true; propagations++; }
+    }
+    if (changed) clone.comment = (clone.comment ? clone.comment + ' ' : '') + `// ⇒ copy-prop`;
+
+    // Record copy: ASSIGN var_or_lit -> result
+    if (instr.op === 'ASSIGN' && instr.arg2 == null) {
+      const src = String(instr.arg1 ?? '');
+      const dst = String(instr.result ?? '');
+      // Only propagate simple copies (not across calls/labels for safety)
+      if (dst && src && dst !== src) {
+        copyMap[dst] = resolve(src);
+        copyStmts++;
+      }
+    } else if (instr.result) {
+      // Result is redefined; invalidate
+      delete copyMap[String(instr.result)];
+    }
+    return clone;
+  });
+
+  return { instructions: result, propagations, copyStmts };
+}
+
+/* ── 3. Strength Reduction ── */
+function strengthReduction(instructions) {
+  let mulCount = 0, divCount = 0, modCount = 0;
+
+  function isPow2(n) { return n > 0 && (n & (n - 1)) === 0; }
+  function log2(n) { let k = 0; while (n > 1) { n >>= 1; k++; } return k; }
+
+  const result = instructions.map((instr, idx) => {
+    const clone = Object.assign(Object.create(Object.getPrototypeOf(instr)), instr);
+
+    if (instr.op === 'MUL') {
+      const b = Number(instr.arg2);
+      if (!isNaN(b) && Number.isInteger(b) && isPow2(b) && b > 1) {
+        clone.op = 'SHL';
+        clone.arg2 = String(log2(b));
+        clone.comment = `⚡ SR: MUL *${b} → SHL ${log2(b)}`;
+        mulCount++;
+      } else {
+        const a = Number(instr.arg1);
+        if (!isNaN(a) && Number.isInteger(a) && isPow2(a) && a > 1) {
+          clone.op = 'SHL'; clone.arg1 = instr.arg2; clone.arg2 = String(log2(a));
+          clone.comment = `⚡ SR: MUL ${a}* → SHL ${log2(a)}`;
+          mulCount++;
+        }
+      }
+    } else if (instr.op === 'DIV') {
+      const b = Number(instr.arg2);
+      if (!isNaN(b) && Number.isInteger(b) && isPow2(b) && b > 1) {
+        clone.op = 'SHR'; clone.arg2 = String(log2(b));
+        clone.comment = `⚡ SR: DIV /${b} → SHR ${log2(b)}`;
+        divCount++;
+      }
+    } else if (instr.op === 'MOD') {
+      const b = Number(instr.arg2);
+      if (!isNaN(b) && Number.isInteger(b) && isPow2(b) && b > 1) {
+        clone.op = 'BAND'; clone.arg2 = String(b - 1);
+        clone.comment = `⚡ SR: MOD %${b} → BAND ${b-1}`;
+        modCount++;
+      }
+    }
+    return clone;
+  });
+
+  return { instructions: result, mulCount, divCount, modCount, totalCount: mulCount + divCount + modCount };
+}
+
+/* ── 4. Loop Invariant Code Motion (LICM) ── */
+function loopInvariantCodeMotion(instructions) {
+  // Identify loop regions by LABEL...GOTO pairs
+  // Find: emitLabel(lStart) ... emitLabel(lEnd)  with GOTO lStart inside
+  const labelPos = {};
+  instructions.forEach((instr, i) => { if (instr.label) labelPos[instr.label] = i; });
+
+  // Find GOTOs that go backward (loops)
+  const loops = []; // [{start, end}]
+  instructions.forEach((instr, i) => {
+    if (instr.op === 'GOTO' && instr.result && labelPos[instr.result] !== undefined) {
+      const target = labelPos[instr.result];
+      if (target < i) {
+        // This is a back-edge: forms a loop from target..i
+        loops.push({ start: target, end: i });
+      }
+    }
+  });
+
+  if (!loops.length) return { instructions: [...instructions], hoistedCount: 0, loopCount: 0 };
+
+  const SIDE_EFFECT_OPS = new Set(['CALL','PARAM','RETURN','HALT','FUNC_BEGIN','FUNC_END','GOTO','IF_TRUE','IF_FALSE','LABEL','NOP','INDEX']);
+  const result = [...instructions];
+  let hoistedCount = 0;
+
+  loops.forEach(loop => {
+    // Vars defined inside loop
+    const defsInLoop = new Set();
+    for (let i = loop.start; i <= loop.end; i++) {
+      if (result[i].result) defsInLoop.add(String(result[i].result));
+    }
+
+    // Instructions that are invariant: their args are NOT defined inside loop
+    const toHoist = [];
+    for (let i = loop.start + 1; i < loop.end; i++) {
+      const instr = result[i];
+      if (SIDE_EFFECT_OPS.has(instr.op)) continue;
+      if (!instr.result) continue;
+      const a1Safe = instr.arg1 == null || !defsInLoop.has(String(instr.arg1));
+      const a2Safe = instr.arg2 == null || !defsInLoop.has(String(instr.arg2));
+      if (a1Safe && a2Safe) {
+        toHoist.push(i);
+      }
+    }
+
+    // Move hoistable instructions before loop start
+    // Work in reverse index order to preserve correctness
+    const hoisted = toHoist.reverse();
+    hoisted.forEach(idx => {
+      const instr = result[idx];
+      const hoistedInstr = Object.assign(Object.create(Object.getPrototypeOf(instr)), instr);
+      hoistedInstr.comment = (hoistedInstr.comment ? hoistedInstr.comment + ' ' : '') + `// 🔄 LICM hoisted`;
+      // Replace original with NOP-like marker
+      result[idx] = Object.assign(Object.create(Object.getPrototypeOf(instr)), instr);
+      result[idx].comment = `// LICM: moved before loop`;
+      // Insert before loop.start
+      result.splice(loop.start, 0, hoistedInstr);
+      // Re-calculate loop bounds (start shifts by 1)
+      loop.start += 1;
+      loop.end += 1;
+      hoistedCount++;
+    });
+  });
+
+  return { instructions: result, hoistedCount, loopCount: loops.length };
+}
+
+/* ── 5. Peephole Optimization ── */
+function peepholeOptimization(instructions) {
+  let add0 = 0, mul1 = 0, mul0 = 0, totalPH = 0;
+
+  const result = instructions.map((instr, idx) => {
+    const clone = Object.assign(Object.create(Object.getPrototypeOf(instr)), instr);
+    const a1 = instr.arg1 != null ? Number(instr.arg1) : NaN;
+    const a2 = instr.arg2 != null ? Number(instr.arg2) : NaN;
+
+    if (instr.op === 'ADD' || instr.op === 'SUB') {
+      // x + 0 = x,  x - 0 = x
+      if (!isNaN(a2) && a2 === 0) {
+        clone.op = 'ASSIGN'; clone.arg2 = null;
+        clone.comment = `🔭 PH: ${instr.op}(x,0) → x`; add0++; totalPH++;
+      } else if (!isNaN(a1) && a1 === 0 && instr.op === 'ADD') {
+        clone.op = 'ASSIGN'; clone.arg1 = instr.arg2; clone.arg2 = null;
+        clone.comment = `🔭 PH: ADD(0,x) → x`; add0++; totalPH++;
+      }
+    } else if (instr.op === 'MUL') {
+      if (!isNaN(a2) && a2 === 0) {
+        clone.op = 'ASSIGN'; clone.arg1 = '0'; clone.arg2 = null;
+        clone.comment = `🔭 PH: MUL(x,0) → 0`; mul0++; totalPH++;
+      } else if (!isNaN(a1) && a1 === 0) {
+        clone.op = 'ASSIGN'; clone.arg1 = '0'; clone.arg2 = null;
+        clone.comment = `🔭 PH: MUL(0,x) → 0`; mul0++; totalPH++;
+      } else if (!isNaN(a2) && a2 === 1) {
+        clone.op = 'ASSIGN'; clone.arg2 = null;
+        clone.comment = `🔭 PH: MUL(x,1) → x`; mul1++; totalPH++;
+      } else if (!isNaN(a1) && a1 === 1) {
+        clone.op = 'ASSIGN'; clone.arg1 = instr.arg2; clone.arg2 = null;
+        clone.comment = `🔭 PH: MUL(1,x) → x`; mul1++; totalPH++;
+      }
+    } else if (instr.op === 'DIV') {
+      if (!isNaN(a2) && a2 === 1) {
+        clone.op = 'ASSIGN'; clone.arg2 = null;
+        clone.comment = `🔭 PH: DIV(x,1) → x`; mul1++; totalPH++;
+      }
+    } else if (instr.op === 'ASSIGN') {
+      // self-assignment: x = x  → remove (NOP it)
+      if (instr.arg1 != null && String(instr.arg1) === String(instr.result) && instr.arg2 == null) {
+        clone.op = 'NOP'; clone.arg1 = null; clone.result = null;
+        clone.comment = `🔭 PH: self-assign removed`; totalPH++;
+      }
+    }
+    return clone;
+  });
+
+  return { instructions: result, add0, mul1, mul0, totalPH };
+}
+
+/* ══════════════════════════════════════════════
+   PHASE 5 RENDERERS
+══════════════════════════════════════════════ */
+function optCodeLines(instructions, highlightIdxs, hiClass) {
+  const lines = buildTACText(instructions);
+  // highlightIdxs: set of instruction indices that were changed
+  return lines.map((line, i) => {
+    const colored = colorTACLine(esc(line));
+    if (highlightIdxs && highlightIdxs.has(i)) {
+      return `<span class="${hiClass}">${colored}</span>`;
+    }
+    return colored;
+  }).join('\n');
+}
+
+function findChangedIdxs(before, after) {
+  const changed = new Set();
+  const beforeLines = buildTACText(before);
+  const afterLines = buildTACText(after);
+  afterLines.forEach((line, i) => { if (line !== (beforeLines[i] || '')) changed.add(i); });
+  return changed;
+}
+
+function renderPhase5(rawInstrs) {
+  // Run all 5 optimization passes in sequence
+  const pass0 = rawInstrs; // input to phase 5 = raw TAC
+
+  // Pass 1: CSE
+  const csePre = pass0;
+  const cseResult = commonSubexpressionElimination([...csePre]);
+  const csePost = cseResult.instructions;
+
+  // Pass 2: Copy Propagation (on CSE output)
+  const cpPre = csePost;
+  const cpResult = copyPropagation([...cpPre]);
+  const cpPost = cpResult.instructions;
+
+  // Pass 3: Strength Reduction (on CP output)
+  const srPre = cpPost;
+  const srResult = strengthReduction([...srPre]);
+  const srPost = srResult.instructions;
+
+  // Pass 4: LICM (on SR output)
+  const licmPre = srPost;
+  const licmResult = loopInvariantCodeMotion([...licmPre]);
+  const licmPost = licmResult.instructions;
+
+  // Pass 5: Peephole (on LICM output)
+  const phPre = licmPost;
+  const phResult = peepholeOptimization([...phPre]);
+  const phPost = phResult.instructions;
+
+  /* ── Render CSE ── */
+  const cseChangedBefore = new Set();
+  const cseChangedAfter = findChangedIdxs(csePre, csePost);
+  document.getElementById('cse-before').innerHTML = buildTACText(csePre).map((l,i)=>colorTACLine(esc(l))).join('\n');
+  document.getElementById('cse-after').innerHTML = buildTACText(csePost).map((l,i)=>{
+    const c=colorTACLine(esc(l));
+    return cseChangedAfter.has(i)?`<span class="hi-cse">${c}</span>`:c;
+  }).join('\n');
+  document.getElementById('cse-before-count').textContent=`${csePre.filter(i=>!['LABEL','NOP','FUNC_BEGIN','FUNC_END','HALT'].includes(i.op)).length} instrs`;
+  document.getElementById('cse-after-count').textContent=`${csePost.filter(i=>!['LABEL','NOP','FUNC_BEGIN','FUNC_END','HALT'].includes(i.op)).length} instrs`;
+  document.getElementById('stat-cse-found').textContent=cseResult.foundCount;
+  document.getElementById('stat-cse-saved').textContent=cseResult.eliminatedCount;
+  document.getElementById('stat-cse-in').textContent=csePre.length;
+  document.getElementById('stat-cse-out').textContent=csePost.length;
+
+  /* ── Render Copy Propagation ── */
+  const cpChanged = findChangedIdxs(cpPre, cpPost);
+  document.getElementById('cp-before').innerHTML=buildTACText(cpPre).map(l=>colorTACLine(esc(l))).join('\n');
+  document.getElementById('cp-after').innerHTML=buildTACText(cpPost).map((l,i)=>{
+    const c=colorTACLine(esc(l));
+    return cpChanged.has(i)?`<span class="hi-cp">${c}</span>`:c;
+  }).join('\n');
+  document.getElementById('cp-before-count').textContent=`${cpPre.filter(i=>!['LABEL','NOP','FUNC_BEGIN','FUNC_END','HALT'].includes(i.op)).length} instrs`;
+  document.getElementById('cp-after-count').textContent=`${cpPost.filter(i=>!['LABEL','NOP','FUNC_BEGIN','FUNC_END','HALT'].includes(i.op)).length} instrs`;
+  document.getElementById('stat-cp-props').textContent=cpResult.propagations;
+  document.getElementById('stat-cp-copies').textContent=cpResult.copyStmts;
+  document.getElementById('stat-cp-in').textContent=cpPre.length;
+  document.getElementById('stat-cp-out').textContent=cpPost.length;
+
+  /* ── Render Strength Reduction ── */
+  const srChanged = findChangedIdxs(srPre, srPost);
+  document.getElementById('sr-before').innerHTML=buildTACText(srPre).map(l=>colorTACLine(esc(l))).join('\n');
+  document.getElementById('sr-after').innerHTML=buildTACText(srPost).map((l,i)=>{
+    const c=colorTACLine(esc(l));
+    return srChanged.has(i)?`<span class="hi-sr">${c}</span>`:c;
+  }).join('\n');
+  document.getElementById('sr-before-count').textContent=`${srPre.filter(i=>!['LABEL','NOP','FUNC_BEGIN','FUNC_END','HALT'].includes(i.op)).length} instrs`;
+  document.getElementById('sr-after-count').textContent=`${srPost.filter(i=>!['LABEL','NOP','FUNC_BEGIN','FUNC_END','HALT'].includes(i.op)).length} instrs`;
+  document.getElementById('stat-sr-muls').textContent=srResult.mulCount;
+  document.getElementById('stat-sr-divs').textContent=srResult.divCount;
+  document.getElementById('stat-sr-mods').textContent=srResult.modCount;
+  document.getElementById('stat-sr-total').textContent=srResult.totalCount;
+
+  /* ── Render LICM ── */
+  const licmChanged = findChangedIdxs(licmPre, licmPost);
+  document.getElementById('licm-before').innerHTML=buildTACText(licmPre).map(l=>colorTACLine(esc(l))).join('\n');
+  document.getElementById('licm-after').innerHTML=buildTACText(licmPost).map((l,i)=>{
+    const c=colorTACLine(esc(l));
+    return licmChanged.has(i)?`<span class="hi-licm">${c}</span>`:c;
+  }).join('\n');
+  document.getElementById('licm-before-count').textContent=`${licmPre.filter(i=>!['LABEL','NOP','FUNC_BEGIN','FUNC_END','HALT'].includes(i.op)).length} instrs`;
+  document.getElementById('licm-after-count').textContent=`${licmPost.filter(i=>!['LABEL','NOP','FUNC_BEGIN','FUNC_END','HALT'].includes(i.op)).length} instrs`;
+  document.getElementById('stat-licm-loops').textContent=licmResult.loopCount;
+  document.getElementById('stat-licm-hoisted').textContent=licmResult.hoistedCount;
+  document.getElementById('stat-licm-in').textContent=licmPre.length;
+  document.getElementById('stat-licm-out').textContent=licmPost.length;
+
+  /* ── Render Peephole ── */
+  const phChanged = findChangedIdxs(phPre, phPost);
+  document.getElementById('ph-before').innerHTML=buildTACText(phPre).map(l=>colorTACLine(esc(l))).join('\n');
+  document.getElementById('ph-after').innerHTML=buildTACText(phPost).map((l,i)=>{
+    const c=colorTACLine(esc(l));
+    return phChanged.has(i)?`<span class="hi-ph">${c}</span>`:c;
+  }).join('\n');
+  document.getElementById('ph-before-count').textContent=`${phPre.filter(i=>!['LABEL','NOP','FUNC_BEGIN','FUNC_END','HALT'].includes(i.op)).length} instrs`;
+  document.getElementById('ph-after-count').textContent=`${phPost.filter(i=>!['LABEL','NOP','FUNC_BEGIN','FUNC_END','HALT'].includes(i.op)).length} instrs`;
+  document.getElementById('stat-ph-add0').textContent=phResult.add0;
+  document.getElementById('stat-ph-mul1').textContent=phResult.mul1;
+  document.getElementById('stat-ph-mul0').textContent=phResult.mul0;
+  document.getElementById('stat-ph-total').textContent=phResult.totalPH;
+
+  /* ── Summary Report ── */
+  const beforeCount = rawInstrs.filter(i=>!['LABEL','NOP','FUNC_BEGIN','FUNC_END','HALT'].includes(i.op)).length;
+  const afterCount  = phPost.filter(i=>!['LABEL','NOP','FUNC_BEGIN','FUNC_END','HALT'].includes(i.op)).length;
+  const saved = Math.max(0, beforeCount - afterCount);
+  const pct = beforeCount > 0 ? ((saved/beforeCount)*100).toFixed(1) : '0.0';
+  document.getElementById('stat-opt-before').textContent = beforeCount;
+  document.getElementById('stat-opt-after').textContent  = afterCount;
+  document.getElementById('stat-opt-saved').textContent  = saved;
+  document.getElementById('stat-opt-pct').textContent    = pct + '%';
+
+  // Build report cards
+  const passes = [
+    { name:'Common Subexpression Elimination', icon:'🔁', badge:'badge-cse', items:[
+      `Redundant expressions found: ${cseResult.foundCount}`,
+      `Instructions eliminated: ${cseResult.eliminatedCount}`,
+      `Technique: hash-based expression table lookup`,
+    ]},
+    { name:'Copy Propagation', icon:'📎', badge:'badge-cp', items:[
+      `Copy statements: ${cpResult.copyStmts}`,
+      `Propagations applied: ${cpResult.propagations}`,
+      `Technique: forward substitution of copy defs`,
+    ]},
+    { name:'Strength Reduction', icon:'⚡', badge:'badge-sr', items:[
+      `MUL→SHL (power-of-2): ${srResult.mulCount}`,
+      `DIV→SHR (power-of-2): ${srResult.divCount}`,
+      `MOD→BAND (power-of-2): ${srResult.modCount}`,
+      `Total reductions: ${srResult.totalCount}`,
+    ]},
+    { name:'Loop Invariant Code Motion', icon:'🔄', badge:'badge-licm', items:[
+      `Loops detected (back-edges): ${licmResult.loopCount}`,
+      `Instructions hoisted: ${licmResult.hoistedCount}`,
+      `Technique: back-edge detection + invariant test`,
+    ]},
+    { name:'Peephole Optimization', icon:'🔭', badge:'badge-ph', items:[
+      `x±0 identity: ${phResult.add0}`,
+      `x×1 / x÷1 identity: ${phResult.mul1}`,
+      `x×0 zero: ${phResult.mul0}`,
+      `Self-assignments removed included`,
+      `Total peephole rewrites: ${phResult.totalPH}`,
+    ]},
+  ];
+
+  document.getElementById('opt-report-grid').innerHTML = passes.map(p=>`
+    <div class="opt-report-card">
+      <div class="opt-report-title">${p.icon} ${p.name}</div>
+      <ul class="opt-report-list">
+        ${p.items.map(it=>`<li class="change"><span class="badge ${p.badge}">✓</span>${esc(it)}</li>`).join('')}
+      </ul>
+    </div>
+  `).join('');
+}
+
+/* ══════════════════════════════════════════════
+   STAGE & TABS
+══════════════════════════════════════════════ */
+function setStage(s){
+  ['ps0','ps1','ps2','ps3','ps4','ps5','ps6'].forEach((id,i)=>{
+    const el=document.getElementById(id);
+    el.className='pstep';
+    if(i<s)el.classList.add('done');
+    else if(i===s){
+      if(s===1)el.classList.add('active-lex');
+      else if(s===2)el.classList.add('active-syn');
+      else if(s===3)el.classList.add('active-sem');
+      else if(s===4)el.classList.add('active-icg');
+      else if(s===5||s===6)el.classList.add('active-opt');
+    }
+  });
+}
+
+function showTab(t){
+  ['tree','sem','icg','opt'].forEach(name=>{
+    document.getElementById(`panel-${name}`).classList.toggle('visible',t===name);
+    const tab=document.getElementById(`tab-${name}`);
+    const activeClass=name==='tree'?'active-syn':name==='sem'?'active-sem':name==='icg'?'active-icg':'active-opt';
+    tab.className='tab'+(t===name?` ${activeClass}`:'');
+  });
+  document.getElementById('tree-toolbar').style.display=t==='tree'?'flex':'none';
+}
+
+function showIcgTab(t){
+  ['tac','opt','cfg'].forEach(name=>{
+    document.getElementById(`ipanel-${name}`).classList.toggle('visible',t===name);
+    document.getElementById(`istab-${name}`).classList.toggle('on',t===name);
+  });
+}
+
+function showOptTab(t){
+  ['cse','cp','sr','licm','ph','report'].forEach(name=>{
+    document.getElementById(`opanel-${name}`).classList.toggle('visible',t===name);
+    document.getElementById(`ostab-${name}`).classList.toggle('on',t===name);
+  });
+}
+
+/* ══════════════════════════════════════════════
+   MAIN PIPELINE
+══════════════════════════════════════════════ */
+document.getElementById('run').addEventListener('click',()=>{
+  const src=document.getElementById('code').value;
+  if(!src.trim()){document.getElementById('status').textContent='No source code entered.';return;}
+  _nodeId=0;
+  setStage(0);document.getElementById('status').textContent='Phase 1: Lexing…';
+
+  setTimeout(()=>{
+    setStage(1);
+    const {tokens,lang}=tokenize(src);
+    document.getElementById('lang-badge').innerHTML=`<span style="font-size:10px;padding:2px 8px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-weight:700;background:${lang==='c'?'rgba(0,194,255,.1)':'rgba(245,158,11,.1)'};color:${lang==='c'?'var(--lex)':'var(--gold)'};">${lang.toUpperCase()}</span>`;
+    const meaningful=tokens.filter(t=>t.type!=='COMMENT');
+    renderTokens(meaningful);
+    document.getElementById('status').textContent=`✅ ${meaningful.length} tokens → Phase 2: Parsing…`;
+    setStage(2);
+
+    setTimeout(()=>{
+      const parser=new Parser(meaningful,lang);
+      const ast=parser.parseProgram();
+      treeRoot=ast;
+      redraw();
+      document.getElementById('status').textContent=`✅ Parse tree built → Phase 3: Semantic analysis…`;
+      setStage(3);
+
+      setTimeout(()=>{
+        const sem=new SemanticAnalyzer(lang);
+        sem.analyze(ast);
+        const allN=flatNodes(ast);
+        renderSymbolTable(sem.sym.allSymbols);
+        renderTypeList(sem.typeMap,allN);
+        renderDiagnostics(sem.errors,sem.warnings,parser.errors);
+        renderSummary(sem.errors,sem.warnings,parser.errors);
+        const totalErr=sem.errors.length+parser.errors.length;
+        document.getElementById('status').textContent=`✅ Semantic done → Phase 4: Generating TAC…`;
+        setStage(4);
+
+        setTimeout(()=>{
+          const icg=new IntermediateCodeGenerator(lang);
+          icg.generate(ast);
+          const rawInstrs=icg.instructions;
+          renderTAC(rawInstrs);
+          const folded=constantFold([...rawInstrs]);
+          const dce=deadCodeElimination([...folded.instructions]);
+          renderOptimised(folded,dce);
+          renderCFG(rawInstrs);
+          document.getElementById('status').textContent=`✅ ICG done → Phase 5: Code Optimization…`;
+          setStage(5);
+
+          setTimeout(()=>{
+            // Phase 5: Code Optimization
+            renderPhase5(rawInstrs);
+            const realInstrs=rawInstrs.filter(i=>!['LABEL','NOP','FUNC_BEGIN','FUNC_END','HALT'].includes(i.op)).length;
+            document.getElementById('status').textContent=`✅ All phases complete — ${meaningful.length} tokens · ${allN.length} AST nodes · ${realInstrs} TAC instrs · ${totalErr} error(s)`;
+            setStage(6);
+            if(totalErr>0) showTab('sem');
+            else showTab('opt');
+            showOptTab('cse');
+          },80);
+        },60);
+      },60);
+    },40);
+  },10);
+});
+
+/* ── Demo programs ── */
+document.getElementById('demo-c').addEventListener('click',()=>{
+  document.getElementById('code').value=`#include <stdio.h>
+
+/* Factorial with type checking demo */
+int factorial(int n) {
+    if (n <= 1) {
+        return 1;
+    }
+    return n * factorial(n - 1);
+}
+
+float divide(int a, int b) {
+    return a / b;
+}
+
+int main() {
+    int x = 10;
+    float y = 3.14;
+    int z = factorial(x);
+    int unused_var = 99;
+    float ratio = divide(x, 5);
+    printf("factorial: %d\\n", z);
+    printf("ratio: %f\\n", ratio);
+    return 0;
+}`;
+  document.getElementById('run').click();
+});
+
+document.getElementById('demo-py').addEventListener('click',()=>{
+  document.getElementById('code').value=`# Python semantic analysis demo
+def greet(name, times):
+    for i in range(times):
+        print("Hello, " + name)
+    return name
+
+class Animal:
+    def __init__(self, name):
+        self.name = name
+
+    def speak(self):
+        return self.name + " speaks"
+
+result = greet("Vijay", 3)
+total = 10 + 20 * 2
+unused = 42
+items = [1, 2, 3]
+lookup = {"key": "value"}
+print(result)`;
+  document.getElementById('run').click();
+});
+
+document.getElementById('clear-btn').addEventListener('click',()=>{
+  document.getElementById('code').value='';
+  document.getElementById('tok-sum').innerHTML='';document.getElementById('tok-count').textContent='';
+  document.getElementById('tok-tb').innerHTML='<tr><td colspan="5" class="empty-row">Run the pipeline to see tokens.</td></tr>';
+  document.getElementById('tree-wrap').innerHTML='<div class="empty-row" style="padding:48px 0;">Run the pipeline to generate the parse tree.</div>';
+  document.getElementById('text-tree').textContent='';
+  document.getElementById('sym-tb').innerHTML='<tr><td colspan="6" class="empty-row">—</td></tr>';
+  document.getElementById('type-list').innerHTML='<div style="color:var(--muted);font-size:11px;">—</div>';
+  document.getElementById('diag-list').innerHTML='<div class="diag diag-ok"><div class="diag-head"><span class="diag-icon">⏳</span><span class="diag-kind kind-ok">Waiting</span></div><div class="diag-msg">Run the pipeline to see diagnostics.</div></div>';
+  document.getElementById('sem-summary').innerHTML='';
+  document.getElementById('lang-badge').innerHTML='';
+  document.getElementById('status').textContent='Ready';
+  document.getElementById('tac-tb').innerHTML='<tr><td colspan="6" class="empty-row">Run the pipeline to generate TAC.</td></tr>';
+  document.getElementById('tac-text-code').innerHTML='<span style="color:var(--muted)">Run the pipeline to see code.</span>';
+  document.getElementById('opt-code').innerHTML='<span style="color:var(--muted)">Run the pipeline.</span>';
+  document.getElementById('dce-code').innerHTML='<span style="color:var(--muted)">Run the pipeline.</span>';
+  document.getElementById('cfg-wrap').innerHTML='<div class="empty-row" style="padding:60px 0;">Run the pipeline to see the CFG.</div>';
+  // Reset Phase 5
+  ['cse-before','cse-after','cp-before','cp-after','sr-before','sr-after','licm-before','licm-after','ph-before','ph-after'].forEach(id=>{
+    const el=document.getElementById(id);if(el)el.innerHTML='<span style="color:var(--muted)">Run the pipeline.</span>';
+  });
+  document.getElementById('opt-report-grid').innerHTML='<div style="color:var(--muted);padding:40px;grid-column:1/-1;text-align:center;font-family:\'JetBrains Mono\',monospace;font-size:12px;">Run the pipeline to see the optimization report.</div>';
+  ['stat-instrs','stat-temps','stat-labels','stat-funcs','stat-orig','stat-folded','stat-eliminated','stat-final',
+   'stat-cse-found','stat-cse-saved','stat-cse-in','stat-cse-out',
+   'stat-cp-props','stat-cp-copies','stat-cp-in','stat-cp-out',
+   'stat-sr-muls','stat-sr-divs','stat-sr-mods','stat-sr-total',
+   'stat-licm-loops','stat-licm-hoisted','stat-licm-in','stat-licm-out',
+   'stat-ph-add0','stat-ph-mul1','stat-ph-mul0','stat-ph-total',
+   'stat-opt-before','stat-opt-after','stat-opt-saved','stat-opt-pct','cfg-info'].forEach(id=>{
+    const el=document.getElementById(id);if(el)el.textContent='—';
+  });
+  treeRoot=null;setStage(-1);showTab('tree');showIcgTab('tac');showOptTab('cse');
+});
+
+// init
+showTab('tree');
+showIcgTab('tac');
+showOptTab('cse');
+</script>
+</body>
+</html>
