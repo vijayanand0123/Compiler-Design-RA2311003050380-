@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DAG Generator — Common Subexpression Elimination</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0d0f14;--card:#13161e;--card2:#1a1d27;--border:#252836;
+  --accent:#00d4ff;--accent2:#70e1ff;--text:#e8eaf0;--muted:#6b7280;
+  --green:#22c55e;--purple:#a78bfa;--orange:#fb923c;--pink:#f472b6;--yellow:#fcd34d;--red:#ef4444;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);
+  padding:20px;line-height:1.6;
+}
+.page{max-width:1200px;margin:0 auto;}
+header{text-align:center;margin-bottom:30px;}
+h1{font-family:'Syne',sans-serif;font-size:32px;background:linear-gradient(135deg,#fff,var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.pill{display:inline-block;padding:4px 12px;background:rgba(0,212,255,0.1);border:1px solid var(--accent);color:var(--accent2);border-radius:999px;font-size:11px;font-weight:800;text-transform:uppercase;margin-bottom:10px;}
+
+.grid{display:grid;grid-template-columns:350px 1fr;gap:20px;}
+@media(max-width:950px){.grid{grid-template-columns:1fr;}}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,0.3);}
+.card-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:15px;letter-spacing:1px;}
+
+textarea{
+  width:100%;height:150px;padding:15px;background:#0a0c12;border:1px solid var(--border);
+  color:var(--accent2);font-family:'JetBrains Mono',monospace;font-size:15px;border-radius:10px;outline:none;resize:vertical;white-space:pre;
+}
+textarea:focus{border-color:var(--accent);}
+
+.btn{
+  background:var(--accent);color:#0d0f14;border:none;padding:12px 24px;
+  border-radius:8px;font-weight:700;cursor:pointer;margin-top:15px;width:100%;transition:0.2s;
+}
+.btn:hover{filter:brightness(1.2);transform:translateY(-2px);}
+
+.tab-nav{display:flex;gap:10px;margin-bottom:15px;border-bottom:1px solid var(--border);padding-bottom:10px;overflow-x:auto;}
+.tab{cursor:pointer;font-size:13px;font-weight:600;color:var(--muted);padding:5px 10px;border-radius:5px;white-space:nowrap;}
+.tab.active{color:var(--accent2);background:rgba(0,212,255,0.1);}
+
+.output-area{background:#0a0c12;border-radius:10px;padding:15px;min-height:500px;overflow:auto;position:relative;}
+table{width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:14px;}
+th,td{padding:12px 15px;border-bottom:1px solid var(--border); vertical-align: middle; text-align:center;}
+th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:1px;background:var(--card2);position:sticky;top:0;z-index:10;}
+
+.node-id{color:var(--accent2);font-weight:bold;}
+.node-val{color:var(--pink);font-weight:bold;}
+.node-leaf{color:var(--green);font-weight:bold;}
+.node-label{color:var(--yellow);}
+
+.hidden{display:none;}
+.notice{font-size:12px;color:var(--accent2);background:rgba(0,212,255,0.1);padding:10px;border-radius:6px;border-left:3px solid var(--accent);margin-top:15px;line-height:1.4;}
+
+canvas { display:block; margin:0 auto; background:#0a0c12; border-radius:8px; border:1px solid var(--border); }
+
+footer{margin-top:40px;text-align:center;font-size:12px;color:var(--muted);border-top:1px solid var(--border);padding-top:20px;}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header>
+    <div class="pill">Compiler Design</div>
+    <h1>Directed Acyclic Graph (DAG)</h1>
+    <p style="color:var(--muted)">Optimize basic blocks by eliminating common subexpressions.</p>
+  </header>
+
+  <div class="grid">
+    <div>
+      <div class="card">
+        <div class="card-title">Basic Block Statements</div>
+        <textarea id="sourceInput" placeholder="a = b * c + b * c&#10;d = b * c"></textarea>
+        <button class="btn" onclick="generateDAG()">Build DAG</button>
+        
+        <div class="notice">
+          <strong>Value-Numbering Algorithm:</strong><br><br>
+          1. <b>Leaves</b> represent variables or constants. If a variable is read multiple times, it points to the same leaf node.<br><br>
+          2. <b>Interior Nodes</b> represent operators. Before creating a new node for <code>Op(Left, Right)</code>, the algorithm checks if an identical node already exists. If it does, the existing node is reused.
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="tab-nav">
+          <div class="tab active" onclick="switchTab('visual-graph', this)">1. DAG Visualizer</div>
+          <div class="tab" onclick="switchTab('value-table', this)">2. Value-Number Array</div>
+        </div>
+
+        <div id="panel-visual-graph" class="output-area">
+          <canvas id="dagCanvas" width="750" height="470"></canvas>
+        </div>
+
+        <div id="panel-value-table" class="output-area hidden">
+          <table id="nodeTable">
+            <thead>
+              <tr>
+                <th width="15%">Node ID</th>
+                <th width="20%">Label(s)</th>
+                <th width="25%">Value / Op</th>
+                <th width="20%">Left Child</th>
+                <th width="20%">Right Child</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="5" style="color:var(--muted); padding:40px;">Enter statements to begin.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <div>Developed for <strong>Code Optimization & Intermediate Representations</strong></div>
+  </footer>
+</div>
+
+<script>
+/* ── LEXER & POSTFIX ALGORITHM ── */
+
+function tokenize(expr) {
+  return expr.match(/([a-zA-Z0-9_]+|[\+\-\*\/\^\(\)])/g) || [];
+}
+
+function isOperand(token) {
+  return /^[a-zA-Z0-9_]+$/.test(token);
+}
+
+function getPrecedence(op) {
+  if (op === '^') return 3;
+  if (op === '*' || op === '/') return 2;
+  if (op === '+' || op === '-') return 1;
+  return 0; 
+}
+
+function infixToPostfix(tokens) {
+  let stack = [];
+  let output = [];
+
+  for (let i = 0; i < tokens.length; i++) {
+    let token = tokens[i];
+    if (isOperand(token)) {
+      output.push(token);
+    } else if (token === '(') {
+      stack.push(token);
+    } else if (token === ')') {
+      while (stack.length > 0 && stack[stack.length - 1] !== '(') {
+        output.push(stack.pop());
+      }
+      stack.pop();
+    } else {
+      while (stack.length > 0 && stack[stack.length - 1] !== '(') {
+        let topPrec = getPrecedence(stack[stack.length - 1]);
+        let currPrec = getPrecedence(token);
+        if ((token !== '^' && topPrec >= currPrec) || (token === '^' && topPrec > currPrec)) {
+          output.push(stack.pop());
+        } else {
+          break;
+        }
+      }
+      stack.push(token);
+    }
+  }
+  while (stack.length > 0) output.push(stack.pop());
+  return output;
+}
+
+/* ── DAG CONSTRUCTION (VALUE NUMBERING) ── */
+
+function buildDAGData(text) {
+  let lines = text.split('\n').map(l => l.trim()).filter(l => l);
+  let nodes = [];
+  let labels = {}; // Maps node.id to an array of assignment labels
+
+  function findLeaf(val) {
+    return nodes.find(n => n.isLeaf && n.val === val);
+  }
+  function findInterior(op, leftId, rightId) {
+    return nodes.find(n => !n.isLeaf && n.op === op && n.left === leftId && n.right === rightId);
+  }
+  function addNode(node) {
+    node.id = nodes.length + 1;
+    nodes.push(node);
+    return node;
+  }
+
+  for (let line of lines) {
+    let lhs = null;
+    let rhs = line;
+    if (line.includes('=')) {
+      let parts = line.split('=');
+      lhs = parts[0].trim();
+      rhs = parts[1].trim();
+    }
+
+    let tokens = tokenize(rhs);
+    let postfix = infixToPostfix(tokens);
+    let stack = [];
+
+    for (let t of postfix) {
+      if (isOperand(t)) {
+        // Look for existing leaf
+        let node = findLeaf(t);
+        if (!node) node = addNode({ isLeaf: true, val: t });
+        stack.push(node.id);
+      } else {
+        // Look for existing interior node
+        let rId = stack.pop();
+        let lId = stack.pop();
+        let node = findInterior(t, lId, rId);
+        if (!node) node = addNode({ isLeaf: false, op: t, left: lId, right: rId });
+        stack.push(node.id);
+      }
+    }
+
+    // Attach assignment label to the root of this statement
+    if (lhs && stack.length > 0) {
+      let rootId = stack.pop();
+      if (!labels[rootId]) labels[rootId] = [];
+      if (!labels[rootId].includes(lhs)) labels[rootId].push(lhs);
+    }
+  }
+
+  return { nodes, labels };
+}
+
+/* ── UI RENDERERS & CANVAS DRAWING ── */
+
+function renderTable(nodes, labels) {
+  const tbody = document.querySelector('#nodeTable tbody');
+  tbody.innerHTML = "";
+  
+  if (nodes.length === 0) return;
+
+  nodes.forEach(n => {
+    let lbls = labels[n.id] ? labels[n.id].join(", ") : "";
+    let valHtml = n.isLeaf ? `<span class="node-leaf">${n.val}</span>` : `<span class="node-val">${n.op}</span>`;
+    
+    tbody.innerHTML += `
+      <tr>
+        <td class="node-id">${n.id}</td>
+        <td class="node-label">${lbls}</td>
+        <td>${valHtml}</td>
+        <td style="color:var(--muted)">${n.isLeaf ? '-' : n.left}</td>
+        <td style="color:var(--muted)">${n.isLeaf ? '-' : n.right}</td>
+      </tr>
+    `;
+  });
+}
+
+function drawDAG(nodes, labels) {
+  const canvas = document.getElementById('dagCanvas');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (nodes.length === 0) return;
+
+  // 1. Calculate Levels (Depth)
+  let levelMap = {};
+  nodes.forEach(n => {
+    if (n.isLeaf) {
+      levelMap[n.id] = 0;
+    } else {
+      let lDepth = levelMap[n.left] || 0;
+      let rDepth = levelMap[n.right] || 0;
+      levelMap[n.id] = Math.max(lDepth, rDepth) + 1;
+    }
+  });
+
+  let maxLevel = Math.max(...Object.values(levelMap));
+  let nodesByLevel = {};
+  for (let i = 0; i <= maxLevel; i++) nodesByLevel[i] = [];
+  
+  nodes.forEach(n => {
+    nodesByLevel[levelMap[n.id]].push(n.id);
+  });
+
+  // 2. Assign Coordinates
+  let coords = {};
+  const PADDING_Y = 60;
+  const LEVEL_HEIGHT = (canvas.height - PADDING_Y * 2) / (maxLevel === 0 ? 1 : maxLevel);
+
+  for (let lvl = 0; lvl <= maxLevel; lvl++) {
+    let levelNodes = nodesByLevel[lvl];
+    let count = levelNodes.length;
+    let sliceWidth = canvas.width / (count + 1);
+
+    levelNodes.forEach((nodeId, idx) => {
+      // Invert Y so level 0 (leaves) is at bottom, maxLevel is at top
+      let y = PADDING_Y + (maxLevel - lvl) * LEVEL_HEIGHT;
+      let x = sliceWidth * (idx + 1);
+      coords[nodeId] = { x, y };
+    });
+  }
+
+  // 3. Draw Edges
+  ctx.lineWidth = 2;
+  nodes.forEach(n => {
+    if (!n.isLeaf) {
+      let start = coords[n.id];
+      let leftEnd = coords[n.left];
+      let rightEnd = coords[n.right];
+
+      // Draw Left Edge
+      if (leftEnd) {
+        ctx.beginPath();
+        ctx.moveTo(start.x, start.y);
+        ctx.lineTo(leftEnd.x, leftEnd.y);
+        ctx.strokeStyle = '#6b7280';
+        ctx.stroke();
+      }
+
+      // Draw Right Edge
+      if (rightEnd) {
+        ctx.beginPath();
+        ctx.moveTo(start.x, start.y);
+        ctx.lineTo(rightEnd.x, rightEnd.y);
+        ctx.strokeStyle = '#6b7280';
+        ctx.stroke();
+      }
+    }
+  });
+
+  // 4. Draw Nodes
+  const NODE_RADIUS = 20;
+  nodes.forEach(n => {
+    let { x, y } = coords[n.id];
+
+    // Node Circle
+    ctx.beginPath();
+    ctx.arc(x, y, NODE_RADIUS, 0, 2 * Math.PI);
+    ctx.fillStyle = '#1a1d27';
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#00d4ff';
+    ctx.stroke();
+
+    // Node Text (Value or Op)
+    ctx.fillStyle = '#e8eaf0';
+    ctx.font = 'bold 14px "JetBrains Mono"';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    let text = n.isLeaf ? n.val : n.op;
+    ctx.fillText(text, x, y);
+
+    // Draw Labels (a=, b=)
+    if (labels[n.id]) {
+      ctx.fillStyle = '#fcd34d';
+      ctx.font = 'bold 12px "Inter"';
+      let lblText = labels[n.id].join(", ") + " =";
+      ctx.fillText(lblText, x - NODE_RADIUS - 20, y);
+    }
+    
+    // Draw Node ID
+    ctx.fillStyle = '#70e1ff';
+    ctx.font = '10px "JetBrains Mono"';
+    ctx.fillText(n.id, x + NODE_RADIUS + 12, y + 10);
+  });
+}
+
+function generateDAG() {
+  const input = document.getElementById('sourceInput').value;
+  if (!input.trim()) return;
+
+  const { nodes, labels } = buildDAGData(input);
+  
+  renderTable(nodes, labels);
+  // Allow DOM to settle before canvas draw
+  setTimeout(() => drawDAG(nodes, labels), 50);
+}
+
+function switchTab(tabId, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('panel-visual-graph').classList.toggle('hidden', tabId !== 'visual-graph');
+  document.getElementById('panel-value-table').classList.toggle('hidden', tabId !== 'value-table');
+}
+
+// Pre-load default (Classic DAG example)
+document.getElementById('sourceInput').value = `a = b * c + b * c\nd = b * c`;
+generateDAG();
+
+</script>
+</body>
+</html>
