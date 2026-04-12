@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>LL(1) Predictive Parsing Table Generator</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0d0f14;--card:#13161e;--card2:#1a1d27;--border:#252836;
+  --accent:#00d4ff;--accent2:#70e1ff;--text:#e8eaf0;--muted:#6b7280;
+  --green:#22c55e;--purple:#a78bfa;--orange:#fb923c;--pink:#f472b6;--yellow:#fcd34d;--red:#ef4444;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);
+  padding:20px;line-height:1.6;
+}
+.page{max-width:1200px;margin:0 auto;}
+header{text-align:center;margin-bottom:30px;}
+h1{font-family:'Syne',sans-serif;font-size:32px;background:linear-gradient(135deg,#fff,var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.pill{display:inline-block;padding:4px 12px;background:rgba(0,212,255,0.1);border:1px solid var(--accent);color:var(--accent2);border-radius:999px;font-size:11px;font-weight:800;text-transform:uppercase;margin-bottom:10px;}
+
+.grid{display:grid;grid-template-columns:350px 1fr;gap:20px;}
+@media(max-width:950px){.grid{grid-template-columns:1fr;}}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,0.3);}
+.card-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:15px;letter-spacing:1px;}
+
+textarea{
+  width:100%;height:220px;padding:15px;background:#0a0c12;border:1px solid var(--border);
+  color:var(--accent2);font-family:'JetBrains Mono',monospace;font-size:14px;border-radius:10px;outline:none;resize:vertical;white-space:pre;
+}
+textarea:focus{border-color:var(--accent);}
+
+.btn{
+  background:var(--accent);color:#0d0f14;border:none;padding:12px 24px;
+  border-radius:8px;font-weight:700;cursor:pointer;margin-top:15px;width:100%;transition:0.2s;
+}
+.btn:hover{filter:brightness(1.2);transform:translateY(-2px);}
+
+.tab-nav{display:flex;gap:10px;margin-bottom:15px;border-bottom:1px solid var(--border);padding-bottom:10px;overflow-x:auto;}
+.tab{cursor:pointer;font-size:13px;font-weight:600;color:var(--muted);padding:5px 10px;border-radius:5px;white-space:nowrap;}
+.tab.active{color:var(--accent2);background:rgba(0,212,255,0.1);}
+
+.output-area{background:#0a0c12;border-radius:10px;padding:15px;min-height:400px;max-height:600px;overflow:auto;}
+table{width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:13px;}
+th,td{padding:10px;border-bottom:1px solid var(--border);text-align:center; vertical-align: middle;}
+th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:1px;background:var(--card2);position:sticky;top:0;z-index:10;}
+td:first-child{font-weight:bold;background:var(--card2);position:sticky;left:0;z-index:5;}
+
+.non-terminal{color:var(--pink);font-weight:bold;}
+.terminal{color:var(--green);}
+.arrow{color:var(--muted);margin:0 5px;}
+.epsilon{color:var(--purple);font-style:italic;}
+.eof{color:var(--yellow);font-weight:bold;}
+.set-brace{color:var(--muted);font-weight:normal;}
+
+.conflict{background:rgba(239, 68, 68, 0.15); border:1px solid var(--red); border-radius:4px; padding:4px;}
+.conflict-warn{color:var(--red); font-size:10px; display:block; margin-top:4px; font-weight:bold;}
+
+.hidden{display:none;}
+.notice{font-size:12px;color:var(--accent2);background:rgba(0,212,255,0.1);padding:10px;border-radius:6px;border-left:3px solid var(--accent);margin-top:15px;line-height:1.4;}
+
+.prod-box {display:inline-block; padding:2px 6px; background:rgba(255,255,255,0.05); border-radius:4px; white-space:nowrap; margin:2px 0;}
+
+footer{margin-top:40px;text-align:center;font-size:12px;color:var(--muted);border-top:1px solid var(--border);padding-top:20px;}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header>
+    <div class="pill">Compiler Design</div>
+    <h1>LL(1) Parse Table Generator</h1>
+    <p style="color:var(--muted)">Construct Predictive Parsing Tables using FIRST and FOLLOW sets.</p>
+  </header>
+
+  <div class="grid">
+    <div>
+      <div class="card">
+        <div class="card-title">Input Grammar</div>
+        <textarea id="grammarInput" placeholder="E -> T E'&#10;E' -> + T E' | e&#10;T -> F T'&#10;T' -> * F T' | e&#10;F -> ( E ) | id"></textarea>
+        <button class="btn" onclick="buildAll()">Generate LL(1) Table</button>
+        
+        <div class="notice">
+          <strong>Algorithm Rules:</strong><br>
+          1. For $A \rightarrow \alpha$, add to $M[A, a]$ for all $a \in FIRST(\alpha)$.<br>
+          2. If $\epsilon \in FIRST(\alpha)$, add to $M[A, b]$ for all $b \in FOLLOW(A)$.
+        </div>
+
+        <div style="margin-top:25px;">
+          <div class="card-title">Syntax Guidelines</div>
+          <ul style="font-size:12px; color:var(--muted); padding-left:15px; margin-top:5px;">
+            <li><b style="color:var(--text)">-></b> separates LHS and RHS.</li>
+            <li><b style="color:var(--text)">|</b> separates multiple productions.</li>
+            <li>Tokens MUST be space-separated (<b style="color:var(--text)">id + T</b>).</li>
+            <li><b style="color:var(--text)">e</b>, <b style="color:var(--text)">eps</b>, or <b style="color:var(--text)">ε</b> represent Epsilon.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="tab-nav">
+          <div class="tab active" onclick="switchTab('parse-table', this)">1. LL(1) Parse Table</div>
+          <div class="tab" onclick="switchTab('first-table', this)">2. FIRST Sets</div>
+          <div class="tab" onclick="switchTab('follow-table', this)">3. FOLLOW Sets</div>
+          <div class="tab" onclick="switchTab('parsed-table', this)">4. Grammar Base</div>
+        </div>
+
+        <div id="panel-parse-table" class="output-area">
+          <table id="parseTable">
+            <thead><tr><th>Enter grammar to begin.</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div id="panel-first-table" class="output-area hidden">
+          <table id="firstTable">
+            <thead><tr><th width="30%">Non-Terminal</th><th>FIRST(X)</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div id="panel-follow-table" class="output-area hidden">
+          <table id="followTable">
+            <thead><tr><th width="30%">Non-Terminal</th><th>FOLLOW(X)</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div id="panel-parsed-table" class="output-area hidden">
+          <table id="parsedTable">
+            <thead><tr><th width="30%">Non-Terminal</th><th>Productions</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <div>Developed for <strong>Syntax Analysis & Top-Down Parsing</strong></div>
+  </footer>
+</div>
+
+<script>
+/* ── DATA STRUCTURES & PARSING ── */
+const EPSILON = "ε";
+const EOF_MARKER = "$";
+
+function isNonTerminal(symbol, order) {
+  return order.includes(symbol);
+}
+
+function parseInput(text) {
+  let lines = text.split('\n');
+  let grammar = {};
+  let order = [];
+  let allSymbols = new Set();
+
+  lines.forEach(line => {
+    line = line.trim();
+    if (!line) return;
+    
+    let parts = line.split(/\s*(?:->|→)\s*/);
+    if (parts.length !== 2) return;
+
+    let lhs = parts[0].trim();
+    if (!grammar[lhs]) {
+      grammar[lhs] = [];
+      order.push(lhs);
+    }
+    allSymbols.add(lhs);
+
+    let rhsStrings = parts[1].split(/\s*\|\s*/);
+    rhsStrings.forEach(rhs => {
+      let tokens = rhs.trim().split(/\s+/).map(t => (t === 'e' || t === 'eps') ? EPSILON : t);
+      tokens.forEach(t => allSymbols.add(t));
+      grammar[lhs].push(tokens);
+    });
+  });
+
+  // Extract Terminals
+  let terminals = Array.from(allSymbols).filter(sym => !order.includes(sym) && sym !== EPSILON);
+  terminals.push(EOF_MARKER); // $ is always the last terminal column
+
+  return { grammar, order, terminals };
+}
+
+/* ── COMPUTE FIRST SETS ── */
+function computeFirstSets(grammar, order) {
+  let first = {};
+  order.forEach(nt => first[nt] = new Set());
+
+  let changed = true;
+  while(changed) {
+    changed = false;
+    for (let nt of order) {
+      let productions = grammar[nt];
+      
+      for (let prod of productions) {
+        let i = 0;
+        let allEpsilon = true;
+        
+        for (i = 0; i < prod.length; i++) {
+          let symbol = prod[i];
+          let beforeSize = first[nt].size;
+
+          if (symbol === EPSILON) {
+            first[nt].add(EPSILON);
+            if (first[nt].size > beforeSize) changed = true;
+            break;
+          } else if (!isNonTerminal(symbol, order)) {
+            first[nt].add(symbol);
+            if (first[nt].size > beforeSize) changed = true;
+            allEpsilon = false;
+            break;
+          } else {
+            let symFirst = first[symbol];
+            symFirst.forEach(val => { if (val !== EPSILON) first[nt].add(val); });
+            if (first[nt].size > beforeSize) changed = true;
+            if (!symFirst.has(EPSILON)) {
+              allEpsilon = false;
+              break;
+            }
+          }
+        }
+        if (allEpsilon && i === prod.length) {
+          let beforeSize = first[nt].size;
+          first[nt].add(EPSILON);
+          if (first[nt].size > beforeSize) changed = true;
+        }
+      }
+    }
+  }
+  return first;
+}
+
+function getSequenceFirst(sequence, firstSets, order) {
+  let result = new Set();
+  if (sequence.length === 0) {
+    result.add(EPSILON);
+    return result;
+  }
+  
+  let allEpsilon = true;
+  for (let symbol of sequence) {
+    if (symbol === EPSILON) {
+      result.add(EPSILON);
+      break;
+    } else if (!isNonTerminal(symbol, order)) {
+      result.add(symbol);
+      allEpsilon = false;
+      break;
+    } else {
+      let symFirst = firstSets[symbol];
+      symFirst.forEach(val => { if (val !== EPSILON) result.add(val); });
+      if (!symFirst.has(EPSILON)) {
+        allEpsilon = false;
+        break;
+      }
+    }
+  }
+  if (allEpsilon) result.add(EPSILON);
+  return result;
+}
+
+/* ── COMPUTE FOLLOW SETS ── */
+function computeFollowSets(grammar, order, firstSets) {
+  let follow = {};
+  order.forEach(nt => follow[nt] = new Set());
+  
+  if (order.length > 0) follow[order[0]].add(EOF_MARKER);
+
+  let changed = true;
+  while(changed) {
+    changed = false;
+    for (let nt of order) {
+      let productions = grammar[nt];
+      
+      for (let prod of productions) {
+        for (let i = 0; i < prod.length; i++) {
+          let symbol = prod[i];
+          if (isNonTerminal(symbol, order)) {
+            let beforeSize = follow[symbol].size;
+            let remainingSeq = prod.slice(i + 1);
+            let seqFirst = getSequenceFirst(remainingSeq, firstSets, order);
+
+            seqFirst.forEach(val => { if (val !== EPSILON) follow[symbol].add(val); });
+
+            if (seqFirst.has(EPSILON) || remainingSeq.length === 0) {
+              follow[nt].forEach(val => follow[symbol].add(val));
+            }
+            if (follow[symbol].size > beforeSize) changed = true;
+          }
+        }
+      }
+    }
+  }
+  return follow;
+}
+
+/* ── BUILD LL(1) PARSING TABLE ── */
+function buildLL1Table(grammar, order, terminals, firstSets, followSets) {
+  // Initialize empty table M[NT][Terminal] = []
+  let table = {};
+  order.forEach(nt => {
+    table[nt] = {};
+    terminals.forEach(t => table[nt][t] = []);
+  });
+
+  order.forEach(nt => {
+    let productions = grammar[nt];
+
+    productions.forEach(prod => {
+      let firstAlpha = getSequenceFirst(prod, firstSets, order);
+
+      // Rule 1: For each a in FIRST(alpha), add A -> alpha to M[A, a]
+      firstAlpha.forEach(t => {
+        if (t !== EPSILON && terminals.includes(t)) {
+          table[nt][t].push(prod);
+        }
+      });
+
+      // Rule 2: If epsilon in FIRST(alpha), for each b in FOLLOW(A), add A -> alpha to M[A, b]
+      if (firstAlpha.has(EPSILON)) {
+        followSets[nt].forEach(f => {
+          if (terminals.includes(f)) {
+            table[nt][f].push(prod);
+          }
+        });
+      }
+    });
+  });
+
+  return table;
+}
+
+/* ── UI RENDERERS ── */
+
+function formatToken(t, order) {
+  if (t === EPSILON) return `<span class="epsilon">${t}</span>`;
+  if (t === EOF_MARKER) return `<span class="eof">${t}</span>`;
+  if (order.includes(t)) return `<span class="non-terminal">${t}</span>`;
+  return `<span class="terminal">${t}</span>`;
+}
+
+function formatProduction(lhs, rhsArray, order) {
+  let rhsHtml = rhsArray.map(t => formatToken(t, order)).join(" ");
+  return `<span class="non-terminal">${lhs}</span> <span class="arrow">-></span> ${rhsHtml}`;
+}
+
+function renderGrammarTable(grammarObj) {
+  const tbody = document.querySelector(`#parsedTable tbody`);
+  tbody.innerHTML = "";
+  
+  grammarObj.order.forEach(nt => {
+    let prods = grammarObj.grammar[nt];
+    let htmlRhs = prods.map(prod => {
+      return prod.map(token => formatToken(token, grammarObj.order)).join(" ");
+    }).join(` <span style="color:var(--muted); margin: 0 10px;">|</span> `);
+
+    tbody.innerHTML += `<tr><td class="non-terminal">${nt}</td><td style="text-align:left"><span class="arrow">-></span> ${htmlRhs}</td></tr>`;
+  });
+}
+
+function renderSetTable(tableId, setObj, order) {
+  const tbody = document.querySelector(`#${tableId} tbody`);
+  tbody.innerHTML = "";
+
+  order.forEach(nt => {
+    let items = Array.from(setObj[nt]);
+    items.sort((a, b) => {
+      if (a === EPSILON) return 1; if (b === EPSILON) return -1;
+      if (a === EOF_MARKER) return 1; if (b === EOF_MARKER) return -1;
+      return a.localeCompare(b);
+    });
+
+    let htmlItems = items.map(t => formatToken(t, order)).join(", ");
+    tbody.innerHTML += `<tr><td class="non-terminal">${nt}</td><td style="text-align:left"><span class="set-brace">{</span> ${htmlItems} <span class="set-brace">}</span></td></tr>`;
+  });
+}
+
+function renderParseTable(ll1Table, order, terminals) {
+  const thead = document.querySelector(`#parseTable thead`);
+  const tbody = document.querySelector(`#parseTable tbody`);
+  
+  // Header
+  let headerHtml = `<tr><th>NT \\ T</th>`;
+  terminals.forEach(t => {
+    headerHtml += `<th>${formatToken(t, order)}</th>`;
+  });
+  headerHtml += `</tr>`;
+  thead.innerHTML = headerHtml;
+
+  // Body
+  tbody.innerHTML = "";
+  order.forEach(nt => {
+    let rowHtml = `<tr><td class="non-terminal">${nt}</td>`;
+    
+    terminals.forEach(t => {
+      let prods = ll1Table[nt][t];
+      if (prods.length === 0) {
+        rowHtml += `<td></td>`;
+      } else if (prods.length === 1) {
+        rowHtml += `<td><div class="prod-box">${formatProduction(nt, prods[0], order)}</div></td>`;
+      } else {
+        // MULTIPLE ENTRIES = CONFLICT (NOT LL1)
+        let conflictHtml = prods.map(p => `<div class="prod-box">${formatProduction(nt, p, order)}</div>`).join("<br>");
+        rowHtml += `<td class="conflict">${conflictHtml}<span class="conflict-warn">Conflict!</span></td>`;
+      }
+    });
+    
+    rowHtml += `</tr>`;
+    tbody.innerHTML += rowHtml;
+  });
+}
+
+function buildAll() {
+  const text = document.getElementById('grammarInput').value;
+  
+  const parsed = parseInput(text);
+  renderGrammarTable(parsed);
+
+  const firstSets = computeFirstSets(parsed.grammar, parsed.order);
+  renderSetTable('firstTable', firstSets, parsed.order);
+
+  const followSets = computeFollowSets(parsed.grammar, parsed.order, firstSets);
+  renderSetTable('followTable', followSets, parsed.order);
+
+  const ll1Table = buildLL1Table(parsed.grammar, parsed.order, parsed.terminals, firstSets, followSets);
+  renderParseTable(ll1Table, parsed.order, parsed.terminals);
+  
+  document.querySelectorAll('.tab')[0].click();
+}
+
+function switchTab(tabId, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('panel-parse-table').classList.toggle('hidden', tabId !== 'parse-table');
+  document.getElementById('panel-parsed-table').classList.toggle('hidden', tabId !== 'parsed-table');
+  document.getElementById('panel-first-table').classList.toggle('hidden', tabId !== 'first-table');
+  document.getElementById('panel-follow-table').classList.toggle('hidden', tabId !== 'follow-table');
+}
+
+// Pre-load default classic LL(1) grammar
+document.getElementById('grammarInput').value = 
+`E -> T E'
+E' -> + T E' | e
+T -> F T'
+T' -> * F T' | e
+F -> ( E ) | id`;
+
+buildAll();
+
+</script>
+</body>
+</html>
