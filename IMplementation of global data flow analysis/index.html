@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Global Data Flow Analysis — Reaching Definitions</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0d0f14;--card:#13161e;--card2:#1a1d27;--border:#252836;
+  --accent:#00d4ff;--accent2:#70e1ff;--text:#e8eaf0;--muted:#6b7280;
+  --green:#22c55e;--purple:#a78bfa;--orange:#fb923c;--pink:#f472b6;--yellow:#fcd34d;--red:#ef4444;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);
+  padding:20px;line-height:1.6;
+}
+.page{max-width:1200px;margin:0 auto;}
+header{text-align:center;margin-bottom:30px;}
+h1{font-family:'Syne',sans-serif;font-size:32px;background:linear-gradient(135deg,#fff,var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.pill{display:inline-block;padding:4px 12px;background:rgba(0,212,255,0.1);border:1px solid var(--accent);color:var(--accent2);border-radius:999px;font-size:11px;font-weight:800;text-transform:uppercase;margin-bottom:10px;}
+
+.grid{display:grid;grid-template-columns:350px 1fr;gap:20px;}
+@media(max-width:950px){.grid{grid-template-columns:1fr;}}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,0.3);}
+.card-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:15px;letter-spacing:1px;}
+
+textarea{
+  width:100%;height:350px;padding:15px;background:#0a0c12;border:1px solid var(--border);
+  color:var(--accent2);font-family:'JetBrains Mono',monospace;font-size:13px;border-radius:10px;outline:none;resize:vertical;white-space:pre;
+}
+textarea:focus{border-color:var(--accent);}
+
+.btn{
+  background:var(--accent);color:#0d0f14;border:none;padding:12px 24px;
+  border-radius:8px;font-weight:700;cursor:pointer;margin-top:15px;width:100%;transition:0.2s;
+}
+.btn:hover{filter:brightness(1.2);transform:translateY(-2px);}
+
+.tab-nav{display:flex;gap:10px;margin-bottom:15px;border-bottom:1px solid var(--border);padding-bottom:10px;overflow-x:auto;}
+.tab{cursor:pointer;font-size:13px;font-weight:600;color:var(--muted);padding:5px 10px;border-radius:5px;white-space:nowrap;}
+.tab.active{color:var(--accent2);background:rgba(0,212,255,0.1);}
+
+.output-area{background:#0a0c12;border-radius:10px;padding:15px;min-height:500px;overflow:auto;}
+table{width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:14px;}
+th,td{padding:12px 15px;border-bottom:1px solid var(--border); vertical-align: middle; text-align:left;}
+th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:1px;background:var(--card2);position:sticky;top:0;z-index:10;}
+
+.block-name{color:var(--pink);font-weight:bold;}
+.def-id{color:var(--yellow);font-weight:bold;}
+.var-name{color:var(--accent2);}
+.set-brace{color:var(--muted);}
+.gen-color{color:var(--green);font-weight:bold;}
+.kill-color{color:var(--red);font-weight:bold;}
+.in-color{color:var(--accent);font-weight:bold;}
+.out-color{color:var(--purple);font-weight:bold;}
+
+.hidden{display:none;}
+.notice{font-size:12px;color:var(--accent2);background:rgba(0,212,255,0.1);padding:10px;border-radius:6px;border-left:3px solid var(--accent);margin-top:15px;line-height:1.4;}
+
+footer{margin-top:40px;text-align:center;font-size:12px;color:var(--muted);border-top:1px solid var(--border);padding-top:20px;}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header>
+    <div class="pill">Compiler Design</div>
+    <h1>Global Data Flow Analysis</h1>
+    <p style="color:var(--muted)">Compute IN and OUT sets using the Reaching Definitions algorithm.</p>
+  </header>
+
+  <div class="grid">
+    <div>
+      <div class="card">
+        <div class="card-title">Control Flow Graph (CFG)</div>
+        <textarea id="sourceInput" placeholder="B1:
+d1: i = m - 1
+d2: j = n
+d3: a = u1
+goto B2
+
+B2:
+d4: i = i + 1
+d5: j = j - 1
+goto B3, B4
+
+B3:
+d6: a = u2
+goto B2
+
+B4:
+d7: i = u3
+"></textarea>
+        <button class="btn" onclick="runAnalysis()">Run Data Flow Analysis</button>
+        
+        <div class="notice">
+          <strong>Syntax Rules:</strong><br><br>
+          • <code>B1:</code> defines a Block.<br>
+          • <code>d1: x = ...</code> defines a variable assignment (Definition ID is 'd1').<br>
+          • <code>goto B2, B3</code> defines the successors of the block.
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="tab-nav">
+          <div class="tab active" onclick="switchTab('in-out-table', this)">1. Global Sets (IN & OUT)</div>
+          <div class="tab" onclick="switchTab('gen-kill-table', this)">2. Local Sets (GEN & KILL)</div>
+          <div class="tab" onclick="switchTab('parsed-blocks', this)">3. Parsed Blocks</div>
+        </div>
+
+        <div id="panel-in-out-table" class="output-area">
+          <div class="notice" id="iterNotice" style="margin-top:0; margin-bottom:15px; border-color:var(--purple); background:rgba(167, 139, 250, 0.1); color:var(--purple);">
+            <strong>Fixed-Point Equations:</strong><br>
+            IN[B] = ∪ OUT[P] for P in predecessors(B)<br>
+            OUT[B] = GEN[B] ∪ (IN[B] - KILL[B])
+          </div>
+          <table id="inOutTable">
+            <thead>
+              <tr>
+                <th width="20%">Block</th>
+                <th width="40%">IN[B]</th>
+                <th width="40%">OUT[B]</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="3" style="color:var(--muted); padding:40px; text-align:center;">Enter statements to begin.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div id="panel-gen-kill-table" class="output-area hidden">
+          <table id="genKillTable">
+            <thead>
+              <tr>
+                <th width="20%">Block</th>
+                <th width="40%">GEN[B]</th>
+                <th width="40%">KILL[B]</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div id="panel-parsed-blocks" class="output-area hidden">
+          <table id="parsedTable">
+            <thead>
+              <tr>
+                <th width="20%">Block</th>
+                <th width="40%">Definitions</th>
+                <th width="40%">Edges (Pre/Suc)</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <div>Developed for <strong>Code Optimization & Data Flow Visualization</strong></div>
+  </footer>
+</div>
+
+<script>
+/* ── CFG PARSER ── */
+
+function parseCFG(text) {
+  const blocks = {};
+  let currentBlock = null;
+  let allDefs = [];
+
+  const lines = text.split('\n');
+  for (let line of lines) {
+    line = line.trim();
+    if (!line) continue;
+
+    // Detect Block Header
+    if (line.endsWith(':') && !line.includes('=')) {
+      currentBlock = line.replace(':', '').trim();
+      blocks[currentBlock] = { name: currentBlock, defs: [], succ: [], pred: [] };
+    } 
+    // Detect Goto (Edges)
+    else if (line.startsWith('goto')) {
+      if (currentBlock) {
+        let targets = line.replace('goto', '').split(',').map(s => s.trim());
+        blocks[currentBlock].succ = targets;
+      }
+    } 
+    // Detect Definitions
+    else if (line.includes(':') && line.includes('=')) {
+      let parts = line.split(':');
+      let defId = parts[0].trim();
+      let assignParts = parts[1].split('=');
+      let varName = assignParts[0].trim();
+
+      if (currentBlock) {
+        let defObj = { id: defId, variable: varName, block: currentBlock, expr: assignParts[1].trim() };
+        blocks[currentBlock].defs.push(defObj);
+        allDefs.push(defObj);
+      }
+    }
+  }
+
+  // Calculate Predecessors from Successors
+  for (let b in blocks) {
+    blocks[b].succ.forEach(s => {
+      if (blocks[s]) {
+        if (!blocks[s].pred.includes(b)) {
+          blocks[s].pred.push(b);
+        }
+      }
+    });
+  }
+
+  return { blocks, allDefs };
+}
+
+/* ── DATA FLOW EQUATIONS ── */
+
+function computeGenKill(parsed) {
+  let { blocks, allDefs } = parsed;
+  let gen = {};
+  let kill = {};
+
+  for (let b in blocks) {
+    gen[b] = new Set();
+    kill[b] = new Set();
+    let blockDefs = blocks[b].defs;
+
+    // GEN: Last definition of a variable in the block
+    let lastDefs = {};
+    for (let d of blockDefs) {
+      lastDefs[d.variable] = d.id;
+    }
+    for (let v in lastDefs) {
+      gen[b].add(lastDefs[v]);
+    }
+
+    // KILL: All other defs in program that define the same variables
+    let varsInBlock = Object.keys(lastDefs);
+    for (let d of allDefs) {
+      if (d.block !== b && varsInBlock.includes(d.variable)) {
+        kill[b].add(d.id);
+      }
+    }
+  }
+  return { gen, kill };
+}
+
+function computeInOut(parsed, gen, kill) {
+  let { blocks } = parsed;
+  let inSets = {};
+  let outSets = {};
+
+  // Initialize sets
+  for (let b in blocks) {
+    inSets[b] = new Set();
+    outSets[b] = new Set();
+  }
+
+  let changed = true;
+  let maxIter = 1000;
+  let iter = 0;
+
+  // Fixed-point Iteration
+  while (changed && iter < maxIter) {
+    changed = false;
+    iter++;
+
+    for (let b in blocks) {
+      // IN[B] = Union OUT[P]
+      let newIn = new Set();
+      for (let p of blocks[b].pred) {
+        for (let d of outSets[p]) {
+          newIn.add(d);
+        }
+      }
+      inSets[b] = newIn;
+
+      // OUT[B] = GEN[B] U (IN[B] - KILL[B])
+      let newOut = new Set(gen[b]);
+      for (let d of inSets[b]) {
+        if (!kill[b].has(d)) {
+          newOut.add(d);
+        }
+      }
+
+      // Check if OUT changed
+      if (newOut.size !== outSets[b].size) {
+        changed = true;
+      } else {
+        for (let d of newOut) {
+          if (!outSets[b].has(d)) changed = true;
+        }
+      }
+      outSets[b] = newOut;
+    }
+  }
+  
+  return { inSets, outSets, iterations: iter };
+}
+
+/* ── UI RENDERERS ── */
+
+function formatSet(set, colorClass) {
+  if (set.size === 0) return `<span class="set-brace">∅</span>`;
+  let sorted = Array.from(set).sort();
+  let items = sorted.map(i => `<span class="${colorClass}">${i}</span>`).join(", ");
+  return `<span class="set-brace">{</span> ${items} <span class="set-brace">}</span>`;
+}
+
+function renderParsedBlocks(parsed) {
+  const tbody = document.querySelector('#parsedTable tbody');
+  tbody.innerHTML = "";
+  
+  for (let b in parsed.blocks) {
+    let blk = parsed.blocks[b];
+    let defsHtml = blk.defs.map(d => `<span class="def-id">${d.id}</span>: <span class="var-name">${d.variable}</span> = ${d.expr}`).join("<br>");
+    if (!defsHtml) defsHtml = `<span style="color:var(--muted)">No defs</span>`;
+    
+    let edgesHtml = `
+      <div style="font-size:12px; color:var(--muted);">Pred: ${blk.pred.length ? blk.pred.join(", ") : "None"}</div>
+      <div style="font-size:12px; color:var(--muted);">Succ: ${blk.succ.length ? blk.succ.join(", ") : "None"}</div>
+    `;
+
+    tbody.innerHTML += `
+      <tr>
+        <td class="block-name">${b}</td>
+        <td>${defsHtml}</td>
+        <td>${edgesHtml}</td>
+      </tr>
+    `;
+  }
+}
+
+function renderGenKill(parsed, gen, kill) {
+  const tbody = document.querySelector('#genKillTable tbody');
+  tbody.innerHTML = "";
+  
+  for (let b in parsed.blocks) {
+    tbody.innerHTML += `
+      <tr>
+        <td class="block-name">${b}</td>
+        <td>${formatSet(gen[b], 'gen-color')}</td>
+        <td>${formatSet(kill[b], 'kill-color')}</td>
+      </tr>
+    `;
+  }
+}
+
+function renderInOut(parsed, inSets, outSets, iterations) {
+  const tbody = document.querySelector('#inOutTable tbody');
+  const notice = document.querySelector('#iterNotice');
+  tbody.innerHTML = "";
+  
+  notice.innerHTML = `<strong>Fixed-Point Equations:</strong><br>
+    IN[B] = ∪ OUT[P] for P in predecessors(B)<br>
+    OUT[B] = GEN[B] ∪ (IN[B] - KILL[B])<br><br>
+    <span style="color:var(--accent)">Algorithm converged in ${iterations} iterations.</span>`;
+
+  for (let b in parsed.blocks) {
+    tbody.innerHTML += `
+      <tr>
+        <td class="block-name">${b}</td>
+        <td>${formatSet(inSets[b], 'in-color')}</td>
+        <td>${formatSet(outSets[b], 'out-color')}</td>
+      </tr>
+    `;
+  }
+}
+
+function runAnalysis() {
+  const input = document.getElementById('sourceInput').value;
+  if (!input.trim()) return;
+
+  const parsed = parseCFG(input);
+  const { gen, kill } = computeGenKill(parsed);
+  const { inSets, outSets, iterations } = computeInOut(parsed, gen, kill);
+  
+  renderParsedBlocks(parsed);
+  renderGenKill(parsed, gen, kill);
+  renderInOut(parsed, inSets, outSets, iterations);
+  
+  // Return to primary tab
+  document.querySelectorAll('.tab')[0].click();
+}
+
+function switchTab(tabId, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('panel-in-out-table').classList.toggle('hidden', tabId !== 'in-out-table');
+  document.getElementById('panel-gen-kill-table').classList.toggle('hidden', tabId !== 'gen-kill-table');
+  document.getElementById('panel-parsed-blocks').classList.toggle('hidden', tabId !== 'parsed-blocks');
+}
+
+// Pre-load default (Classic Reaching Definitions Example)
+document.getElementById('sourceInput').value = `B1:
+d1: i = m - 1
+d2: j = n
+d3: a = u1
+goto B2
+
+B2:
+d4: i = i + 1
+d5: j = j - 1
+goto B3, B4
+
+B3:
+d6: a = u2
+goto B2
+
+B4:
+d7: i = u3`;
+runAnalysis();
+
+</script>
+</body>
+</html>
