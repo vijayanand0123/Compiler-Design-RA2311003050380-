@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>LR(0) Item Set Calculator</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0d0f14;--card:#13161e;--card2:#1a1d27;--border:#252836;
+  --accent:#00d4ff;--accent2:#70e1ff;--text:#e8eaf0;--muted:#6b7280;
+  --green:#22c55e;--purple:#a78bfa;--orange:#fb923c;--pink:#f472b6;--yellow:#fcd34d;--red:#ef4444;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);
+  padding:20px;line-height:1.6;
+}
+.page{max-width:1200px;margin:0 auto;}
+header{text-align:center;margin-bottom:30px;}
+h1{font-family:'Syne',sans-serif;font-size:32px;background:linear-gradient(135deg,#fff,var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.pill{display:inline-block;padding:4px 12px;background:rgba(0,212,255,0.1);border:1px solid var(--accent);color:var(--accent2);border-radius:999px;font-size:11px;font-weight:800;text-transform:uppercase;margin-bottom:10px;}
+
+.grid{display:grid;grid-template-columns:350px 1fr;gap:20px;}
+@media(max-width:950px){.grid{grid-template-columns:1fr;}}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,0.3);}
+.card-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:15px;letter-spacing:1px;}
+
+textarea{
+  width:100%;height:220px;padding:15px;background:#0a0c12;border:1px solid var(--border);
+  color:var(--accent2);font-family:'JetBrains Mono',monospace;font-size:14px;border-radius:10px;outline:none;resize:vertical;white-space:pre;
+}
+textarea:focus{border-color:var(--accent);}
+
+.btn{
+  background:var(--accent);color:#0d0f14;border:none;padding:12px 24px;
+  border-radius:8px;font-weight:700;cursor:pointer;margin-top:15px;width:100%;transition:0.2s;
+}
+.btn:hover{filter:brightness(1.2);transform:translateY(-2px);}
+
+.tab-nav{display:flex;gap:10px;margin-bottom:15px;border-bottom:1px solid var(--border);padding-bottom:10px;overflow-x:auto;}
+.tab{cursor:pointer;font-size:13px;font-weight:600;color:var(--muted);padding:5px 10px;border-radius:5px;white-space:nowrap;}
+.tab.active{color:var(--accent2);background:rgba(0,212,255,0.1);}
+
+.output-area{background:#0a0c12;border-radius:10px;padding:15px;min-height:450px;max-height:650px;overflow:auto;}
+table{width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:13px;}
+th,td{padding:10px;border-bottom:1px solid var(--border);text-align:left; vertical-align: middle;}
+th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:1px;background:var(--card2);position:sticky;top:0;z-index:10;}
+
+.state-block {background:var(--card2); border:1px solid var(--border); border-radius:8px; margin-bottom:15px; overflow:hidden;}
+.state-header {background:rgba(255,255,255,0.03); padding:8px 15px; font-weight:bold; color:var(--accent); border-bottom:1px solid var(--border); font-family:'JetBrains Mono', monospace;}
+.state-items {padding:10px 15px; line-height:1.8;}
+.state-transitions {padding:8px 15px; background:rgba(0,0,0,0.2); border-top:1px dashed var(--border); font-size:12px; color:var(--muted);}
+
+.non-terminal{color:var(--pink);font-weight:bold;}
+.terminal{color:var(--green);}
+.arrow{color:var(--muted);margin:0 5px;}
+.dot{color:var(--red);font-weight:bold;font-size:16px;text-shadow: 0 0 5px rgba(239, 68, 68, 0.6);}
+.epsilon{color:var(--purple);font-style:italic;}
+
+.hidden{display:none;}
+.notice{font-size:12px;color:var(--accent2);background:rgba(0,212,255,0.1);padding:10px;border-radius:6px;border-left:3px solid var(--accent);margin-top:15px;line-height:1.4;}
+
+footer{margin-top:40px;text-align:center;font-size:12px;color:var(--muted);border-top:1px solid var(--border);padding-top:20px;}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header>
+    <div class="pill">Compiler Design</div>
+    <h1>LR(0) Item Sets Calculator</h1>
+    <p style="color:var(--muted)">Computes Closure, GOTO, and Canonical Collection for Bottom-Up Parsing.</p>
+  </header>
+
+  <div class="grid">
+    <div>
+      <div class="card">
+        <div class="card-title">Input Grammar</div>
+        <textarea id="grammarInput" placeholder="E -> E + T | T&#10;T -> T * F | F&#10;F -> ( E ) | id"></textarea>
+        <button class="btn" onclick="buildLR0()">Compute LR(0) Items</button>
+        
+        <div class="notice">
+          <strong>Algorithm Flow:</strong><br>
+          1. Augment the grammar ($S' \to S$).<br>
+          2. Compute $Closure(I)$ for item sets.<br>
+          3. Apply $GOTO(I, X)$ to transition the dot (•) past symbol $X$.<br>
+          4. Repeat until no new item sets form.
+        </div>
+
+        <div style="margin-top:25px;">
+          <div class="card-title">Syntax Guidelines</div>
+          <ul style="font-size:12px; color:var(--muted); padding-left:15px; margin-top:5px;">
+            <li><b style="color:var(--text)">-></b> separates LHS and RHS.</li>
+            <li><b style="color:var(--text)">|</b> separates multiple productions.</li>
+            <li>Tokens MUST be space-separated (<b style="color:var(--text)">E + T</b>).</li>
+            <li><b style="color:var(--text)">e</b> or <b style="color:var(--text)">eps</b> represent Epsilon.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="tab-nav">
+          <div class="tab active" onclick="switchTab('lr0-states', this)">1. LR(0) States & Transitions</div>
+          <div class="tab" onclick="switchTab('goto-table', this)">2. GOTO Table</div>
+          <div class="tab" onclick="switchTab('augmented-grammar', this)">3. Augmented Grammar</div>
+        </div>
+
+        <div id="panel-lr0-states" class="output-area">
+          <div id="statesContainer">
+            <div style="text-align:center; color:var(--muted); padding:40px;">Enter grammar and click Compute.</div>
+          </div>
+        </div>
+
+        <div id="panel-goto-table" class="output-area hidden">
+          <table id="gotoTable">
+            <thead><tr><th>From State</th><th>Symbol</th><th>To State</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div id="panel-augmented-grammar" class="output-area hidden">
+          <table id="grammarTable">
+            <thead><tr><th>#</th><th>Non-Terminal</th><th>Production</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <div>Developed for <strong>Automata & Syntax Analysis</strong></div>
+  </footer>
+</div>
+
+<script>
+/* ── DATA STRUCTURES & PARSING ── */
+const EPSILON = "ε";
+
+function parseGrammar(text) {
+  let lines = text.split('\n');
+  let productions = [];
+  let nonTerminals = new Set();
+  let symbols = new Set();
+  
+  lines.forEach(line => {
+    line = line.trim();
+    if (!line) return;
+    
+    let parts = line.split(/\s*(?:->|→)\s*/);
+    if (parts.length !== 2) return;
+
+    let lhs = parts[0].trim();
+    nonTerminals.add(lhs);
+    symbols.add(lhs);
+
+    let rhsStrings = parts[1].split(/\s*\|\s*/);
+    rhsStrings.forEach(rhs => {
+      let tokens = rhs.trim().split(/\s+/).map(t => (t === 'e' || t === 'eps') ? EPSILON : t);
+      tokens.forEach(t => symbols.add(t));
+      productions.push({ lhs, rhs: tokens });
+    });
+  });
+
+  return { productions, nonTerminals: Array.from(nonTerminals), symbols: Array.from(symbols) };
+}
+
+/* ── LR(0) LOGIC ── */
+
+// Create a canonical string representation for an item
+// e.g., "E -> E . + T"
+function hashItem(item) {
+  let rhsStr = [...item.rhs];
+  rhsStr.splice(item.dot, 0, ".");
+  return `${item.lhs} -> ${rhsStr.join(" ")}`;
+}
+
+// Create a canonical string for a whole state (set of items)
+function hashState(items) {
+  let hashes = items.map(hashItem);
+  hashes.sort();
+  return hashes.join(" | ");
+}
+
+// Check if a list contains an item
+function containsItem(items, itemToFind) {
+  let targetHash = hashItem(itemToFind);
+  return items.some(i => hashItem(i) === targetHash);
+}
+
+// CLOSURE algorithm
+function closure(items, productions, nonTerminals) {
+  let result = [...items];
+  let added = true;
+
+  while (added) {
+    added = false;
+    for (let i = 0; i < result.length; i++) {
+      let item = result[i];
+      // If dot is not at the end
+      if (item.dot < item.rhs.length) {
+        let symbolAfterDot = item.rhs[item.dot];
+        
+        // If the symbol after the dot is a Non-Terminal
+        if (nonTerminals.includes(symbolAfterDot)) {
+          // Find all productions for this Non-Terminal
+          for (let prod of productions) {
+            if (prod.lhs === symbolAfterDot) {
+              // Handle Epsilon productions specifically (A -> e becomes A -> .)
+              let newItem = { 
+                lhs: prod.lhs, 
+                rhs: prod.rhs[0] === EPSILON ? [] : [...prod.rhs], 
+                dot: 0 
+              };
+              
+              if (!containsItem(result, newItem)) {
+                result.push(newItem);
+                added = true;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return result;
+}
+
+// GOTO algorithm
+function goto(items, symbol, productions, nonTerminals) {
+  let movedItems = [];
+  for (let item of items) {
+    if (item.dot < item.rhs.length && item.rhs[item.dot] === symbol) {
+      movedItems.push({
+        lhs: item.lhs,
+        rhs: [...item.rhs],
+        dot: item.dot + 1
+      });
+    }
+  }
+  return closure(movedItems, productions, nonTerminals);
+}
+
+// Construct Canonical Collection of LR(0) items
+function buildCanonicalCollection(parsed) {
+  let startSymbol = parsed.productions[0].lhs;
+  let augmentedStart = startSymbol + "'";
+  
+  // 1. Augment grammar
+  let augmentedProductions = [
+    { lhs: augmentedStart, rhs: [startSymbol] },
+    ...parsed.productions
+  ];
+  let nts = [augmentedStart, ...parsed.nonTerminals];
+  
+  // 2. Initialize State 0
+  let initialItem = { lhs: augmentedStart, rhs: [startSymbol], dot: 0 };
+  let i0 = closure([initialItem], augmentedProductions, nts);
+  
+  let states = [i0];
+  let stateHashes = { [hashState(i0)]: 0 };
+  let transitions = []; // { from, symbol, to }
+
+  let queue = [0];
+
+  // 3. BFS to build all states
+  while (queue.length > 0) {
+    let currStateIdx = queue.shift();
+    let currStateItems = states[currStateIdx];
+
+    // Find all symbols that appear immediately after a dot
+    let symbolsAfterDot = new Set();
+    for (let item of currStateItems) {
+      if (item.dot < item.rhs.length) {
+        symbolsAfterDot.add(item.rhs[item.dot]);
+      }
+    }
+
+    // Compute GOTO for each symbol
+    for (let sym of symbolsAfterDot) {
+      let nextStateItems = goto(currStateItems, sym, augmentedProductions, nts);
+      if (nextStateItems.length === 0) continue;
+
+      let nextHash = hashState(nextStateItems);
+      let nextStateIdx;
+
+      // If this state doesn't exist yet, add it
+      if (stateHashes[nextHash] === undefined) {
+        states.push(nextStateItems);
+        nextStateIdx = states.length - 1;
+        stateHashes[nextHash] = nextStateIdx;
+        queue.push(nextStateIdx);
+      } else {
+        nextStateIdx = stateHashes[nextHash];
+      }
+
+      transitions.push({ from: currStateIdx, symbol: sym, to: nextStateIdx });
+    }
+  }
+
+  return { states, transitions, augmentedProductions, nts };
+}
+
+/* ── UI RENDERERS ── */
+
+function formatSymbol(sym, nts) {
+  if (sym === EPSILON) return `<span class="epsilon">${sym}</span>`;
+  if (nts.includes(sym)) return `<span class="non-terminal">${sym}</span>`;
+  return `<span class="terminal">${sym}</span>`;
+}
+
+function formatItem(item, nts) {
+  let rhsHtml = "";
+  for (let i = 0; i <= item.rhs.length; i++) {
+    if (i === item.dot) rhsHtml += `<span class="dot">•</span> `;
+    if (i < item.rhs.length) rhsHtml += formatSymbol(item.rhs[i], nts) + " ";
+  }
+  return `<span class="non-terminal">${item.lhs}</span> <span class="arrow">-></span> ${rhsHtml.trim()}`;
+}
+
+function renderGrammar(productions, nts) {
+  const tbody = document.querySelector('#grammarTable tbody');
+  tbody.innerHTML = "";
+  productions.forEach((prod, idx) => {
+    let rhsHtml = prod.rhs.length === 0 ? `<span class="epsilon">ε</span>` : prod.rhs.map(t => formatSymbol(t, nts)).join(" ");
+    tbody.innerHTML += `<tr><td style="color:var(--muted)">(${idx})</td><td><span class="non-terminal">${prod.lhs}</span></td><td><span class="arrow">-></span> ${rhsHtml}</td></tr>`;
+  });
+}
+
+function renderGOTO(transitions, nts) {
+  const tbody = document.querySelector('#gotoTable tbody');
+  tbody.innerHTML = "";
+  transitions.forEach(tr => {
+    let type = nts.includes(tr.symbol) ? `<span style="color:var(--pink);font-size:10px;text-transform:uppercase">GOTO</span>` : `<span style="color:var(--green);font-size:10px;text-transform:uppercase">SHIFT</span>`;
+    tbody.innerHTML += `
+      <tr>
+        <td><span style="color:var(--accent2); font-weight:bold;">I<sub>${tr.from}</sub></span></td>
+        <td>${formatSymbol(tr.symbol, nts)} <span style="margin-left:8px">${type}</span></td>
+        <td><span style="color:var(--accent2); font-weight:bold;">I<sub>${tr.to}</sub></span></td>
+      </tr>`;
+  });
+}
+
+function renderStates(states, transitions, nts) {
+  const container = document.getElementById('statesContainer');
+  container.innerHTML = "";
+
+  states.forEach((state, idx) => {
+    let itemsHtml = state.map(item => `<div>${formatItem(item, nts)}</div>`).join("");
+    
+    // Find outgoing transitions for this state
+    let stateTrans = transitions.filter(t => t.from === idx);
+    let transHtml = "";
+    if (stateTrans.length > 0) {
+      let links = stateTrans.map(t => `${formatSymbol(t.symbol, nts)} <span class="arrow">→</span> I<sub>${t.to}</sub>`).join(" &nbsp;&nbsp;|&nbsp;&nbsp; ");
+      transHtml = `<div class="state-transitions">Transitions: &nbsp; ${links}</div>`;
+    } else {
+      transHtml = `<div class="state-transitions" style="color:var(--yellow)">Accept / Reduce State (No outgoing transitions)</div>`;
+    }
+
+    container.innerHTML += `
+      <div class="state-block">
+        <div class="state-header">State I<sub>${idx}</sub></div>
+        <div class="state-items">
+          ${itemsHtml}
+        </div>
+        ${transHtml}
+      </div>
+    `;
+  });
+}
+
+function buildLR0() {
+  const text = document.getElementById('grammarInput').value;
+  const parsed = parseGrammar(text);
+  
+  if(parsed.productions.length === 0) {
+    document.getElementById('statesContainer').innerHTML = `<div style="text-align:center; color:var(--red); padding:40px;">Please enter a valid grammar.</div>`;
+    return;
+  }
+
+  const result = buildCanonicalCollection(parsed);
+  
+  renderStates(result.states, result.transitions, result.nts);
+  renderGOTO(result.transitions, result.nts);
+  renderGrammar(result.augmentedProductions, result.nts);
+  
+  document.querySelectorAll('.tab')[0].click();
+}
+
+function switchTab(tabId, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('panel-lr0-states').classList.toggle('hidden', tabId !== 'lr0-states');
+  document.getElementById('panel-goto-table').classList.toggle('hidden', tabId !== 'goto-table');
+  document.getElementById('panel-augmented-grammar').classList.toggle('hidden', tabId !== 'augmented-grammar');
+}
+
+// Pre-load default (Classic arithmetic grammar used for LR tutorials)
+document.getElementById('grammarInput').value = 
+`E -> E + T | T
+T -> T * F | F
+F -> ( E ) | id`;
+
+buildLR0();
+
+</script>
+</body>
+</html>
