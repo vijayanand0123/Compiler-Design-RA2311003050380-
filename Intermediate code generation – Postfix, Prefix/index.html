@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Intermediate Code Generator — Postfix & Prefix</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0d0f14;--card:#13161e;--card2:#1a1d27;--border:#252836;
+  --accent:#00d4ff;--accent2:#70e1ff;--text:#e8eaf0;--muted:#6b7280;
+  --green:#22c55e;--purple:#a78bfa;--orange:#fb923c;--pink:#f472b6;--yellow:#fcd34d;--red:#ef4444;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);
+  padding:20px;line-height:1.6;
+}
+.page{max-width:1200px;margin:0 auto;}
+header{text-align:center;margin-bottom:30px;}
+h1{font-family:'Syne',sans-serif;font-size:32px;background:linear-gradient(135deg,#fff,var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.pill{display:inline-block;padding:4px 12px;background:rgba(0,212,255,0.1);border:1px solid var(--accent);color:var(--accent2);border-radius:999px;font-size:11px;font-weight:800;text-transform:uppercase;margin-bottom:10px;}
+
+.grid{display:grid;grid-template-columns:350px 1fr;gap:20px;}
+@media(max-width:950px){.grid{grid-template-columns:1fr;}}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,0.3);}
+.card-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:15px;letter-spacing:1px;}
+
+input[type="text"]{
+  width:100%;padding:15px;background:#0a0c12;border:1px solid var(--border);
+  color:var(--accent2);font-family:'JetBrains Mono',monospace;font-size:16px;border-radius:10px;outline:none;
+}
+input[type="text"]:focus{border-color:var(--accent);}
+
+.btn{
+  background:var(--accent);color:#0d0f14;border:none;padding:12px 24px;
+  border-radius:8px;font-weight:700;cursor:pointer;margin-top:15px;width:100%;transition:0.2s;
+}
+.btn:hover{filter:brightness(1.2);transform:translateY(-2px);}
+
+.tab-nav{display:flex;gap:10px;margin-bottom:15px;border-bottom:1px solid var(--border);padding-bottom:10px;overflow-x:auto;}
+.tab{cursor:pointer;font-size:13px;font-weight:600;color:var(--muted);padding:5px 10px;border-radius:5px;white-space:nowrap;}
+.tab.active{color:var(--accent2);background:rgba(0,212,255,0.1);}
+
+.output-area{background:#0a0c12;border-radius:10px;padding:15px;min-height:450px;max-height:650px;overflow:auto;}
+table{width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:14px;}
+th,td{padding:12px 15px;border-bottom:1px solid var(--border); vertical-align: middle;}
+th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:1px;background:var(--card2);position:sticky;top:0;z-index:10;text-align:left;}
+
+.operand{color:var(--green);font-weight:bold;}
+.operator{color:var(--pink);font-weight:bold;}
+.paren{color:var(--yellow);}
+
+.hidden{display:none;}
+.notice{font-size:12px;color:var(--accent2);background:rgba(0,212,255,0.1);padding:10px;border-radius:6px;border-left:3px solid var(--accent);margin-top:15px;line-height:1.4;}
+
+.result-box{background:var(--card2); border:1px solid var(--border); padding:15px; border-radius:8px; margin-top:15px; font-family:'JetBrains Mono', monospace; color:var(--text); word-break: break-all;}
+.result-label{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:5px; display:block;}
+
+footer{margin-top:40px;text-align:center;font-size:12px;color:var(--muted);border-top:1px solid var(--border);padding-top:20px;}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header>
+    <div class="pill">Compiler Design</div>
+    <h1>Intermediate Code Generator</h1>
+    <p style="color:var(--muted)">Convert Infix expressions to Postfix (Reverse Polish) and Prefix (Polish) notations.</p>
+  </header>
+
+  <div class="grid">
+    <div>
+      <div class="card">
+        <div class="card-title">Infix Expression</div>
+        <input type="text" id="infixInput" value="(A + B) * (C - D)" placeholder="e.g. A + B * C">
+        <button class="btn" onclick="generateCode()">Generate Intermediate Code</button>
+        
+        <div class="notice">
+          <strong>Algorithm Rules:</strong><br>
+          • <b>Postfix:</b> Left-to-Right scan. Stack holds operators. Operands go directly to output.<br>
+          • <b>Prefix:</b> Reverse string, swap parentheses, apply modified Postfix algorithm, reverse final result.
+        </div>
+
+        <div class="result-box">
+          <span class="result-label">Generated Postfix</span>
+          <div id="finalPostfix" style="color:var(--accent2); font-weight:bold;">---</div>
+        </div>
+
+        <div class="result-box">
+          <span class="result-label">Generated Prefix</span>
+          <div id="finalPrefix" style="color:var(--orange); font-weight:bold;">---</div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="tab-nav">
+          <div class="tab active" onclick="switchTab('postfix-trace', this)">Postfix Stack Trace</div>
+          <div class="tab" onclick="switchTab('prefix-trace', this)">Prefix Stack Trace</div>
+        </div>
+
+        <div id="panel-postfix-trace" class="output-area">
+          <table id="postfixTable">
+            <thead>
+              <tr>
+                <th width="10%">Step</th>
+                <th width="20%">Symbol</th>
+                <th width="35%">Stack</th>
+                <th width="35%">Expression Output</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="4" style="text-align:center; color:var(--muted); padding:40px;">Enter an expression and click Generate.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div id="panel-prefix-trace" class="output-area hidden">
+          <div class="notice" style="margin-top:0; margin-bottom:15px; border-color:var(--orange); background:rgba(251,146,60,0.1); color:var(--orange);">
+            <strong>Prefix Generation Steps:</strong><br>
+            1. Reverse the Infix string.<br>
+            2. Scan left-to-right (shown below), popping operators when Stack Precedence > Current Precedence.<br>
+            3. Reverse the final Expression Output.
+          </div>
+          <table id="prefixTable">
+            <thead>
+              <tr>
+                <th width="10%">Step</th>
+                <th width="20%">Symbol</th>
+                <th width="35%">Stack</th>
+                <th width="35%">Expression Output</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <div>Developed for <strong>Intermediate Code Generation Visualization</strong></div>
+  </footer>
+</div>
+
+<script>
+/* ── HELPER FUNCTIONS ── */
+
+function tokenize(expr) {
+  // Matches multi-char operands (e.g., id1), numbers, and standard operators
+  return expr.match(/([a-zA-Z0-9_]+|[\+\-\*\/\^\(\)])/g) || [];
+}
+
+function isOperand(token) {
+  return /^[a-zA-Z0-9_]+$/.test(token);
+}
+
+function getPrecedence(op) {
+  if (op === '^') return 3;
+  if (op === '*' || op === '/') return 2;
+  if (op === '+' || op === '-') return 1;
+  return 0; // for '(' and ')'
+}
+
+function formatToken(t) {
+  if (isOperand(t)) return `<span class="operand">${t}</span>`;
+  if (t === '(' || t === ')') return `<span class="paren">${t}</span>`;
+  if (t === 'EOF') return `<span style="color:var(--muted)">EOF</span>`;
+  return `<span class="operator">${t}</span>`;
+}
+
+function formatStream(arr) {
+  return arr.map(formatToken).join(" ");
+}
+
+/* ── POSTFIX ALGORITHM ── */
+
+function infixToPostfix(tokens) {
+  let stack = [];
+  let output = [];
+  let steps = [];
+
+  for (let i = 0; i < tokens.length; i++) {
+    let token = tokens[i];
+
+    if (isOperand(token)) {
+      output.push(token);
+    } 
+    else if (token === '(') {
+      stack.push(token);
+    } 
+    else if (token === ')') {
+      while (stack.length > 0 && stack[stack.length - 1] !== '(') {
+        output.push(stack.pop());
+      }
+      stack.pop(); // Remove '('
+    } 
+    else {
+      // Operator
+      while (stack.length > 0 && stack[stack.length - 1] !== '(') {
+        let topPrec = getPrecedence(stack[stack.length - 1]);
+        let currPrec = getPrecedence(token);
+
+        // Postfix: pop if top >= curr (for Left Associative). 
+        // If Right Associative (^), pop if top > curr.
+        if ((token !== '^' && topPrec >= currPrec) || (token === '^' && topPrec > currPrec)) {
+          output.push(stack.pop());
+        } else {
+          break;
+        }
+      }
+      stack.push(token);
+    }
+
+    steps.push({
+      step: i + 1,
+      symbol: token,
+      stack: [...stack],
+      output: [...output]
+    });
+  }
+
+  // Pop remaining operators
+  while (stack.length > 0) {
+    output.push(stack.pop());
+    steps.push({
+      step: steps.length + 1,
+      symbol: 'EOF',
+      stack: [...stack],
+      output: [...output]
+    });
+  }
+
+  return { postfix: output.join(" "), steps };
+}
+
+/* ── PREFIX ALGORITHM ── */
+
+function infixToPrefix(tokens) {
+  let stack = [];
+  let output = [];
+  let steps = [];
+
+  // Step 1: Reverse the tokens and swap parentheses
+  let reversedTokens = [...tokens].reverse().map(t => {
+    if (t === '(') return ')';
+    if (t === ')') return '(';
+    return t;
+  });
+
+  // Step 2: Modified Postfix Algorithm
+  for (let i = 0; i < reversedTokens.length; i++) {
+    let token = reversedTokens[i];
+
+    if (isOperand(token)) {
+      output.push(token);
+    } 
+    else if (token === '(') {
+      stack.push(token);
+    } 
+    else if (token === ')') {
+      while (stack.length > 0 && stack[stack.length - 1] !== '(') {
+        output.push(stack.pop());
+      }
+      stack.pop(); // Remove '('
+    } 
+    else {
+      // Operator
+      while (stack.length > 0 && stack[stack.length - 1] !== '(') {
+        let topPrec = getPrecedence(stack[stack.length - 1]);
+        let currPrec = getPrecedence(token);
+
+        // Prefix (Reversed Scan): pop if top > curr (for Left Associative). 
+        // If Right Associative (^), pop if top >= curr.
+        if ((token !== '^' && topPrec > currPrec) || (token === '^' && topPrec >= currPrec)) {
+          output.push(stack.pop());
+        } else {
+          break;
+        }
+      }
+      stack.push(token);
+    }
+
+    steps.push({
+      step: i + 1,
+      symbol: token,
+      stack: [...stack],
+      output: [...output]
+    });
+  }
+
+  // Pop remaining operators
+  while (stack.length > 0) {
+    output.push(stack.pop());
+    steps.push({
+      step: steps.length + 1,
+      symbol: 'EOF',
+      stack: [...stack],
+      output: [...output]
+    });
+  }
+
+  // Step 3: Reverse the final output to get actual prefix
+  let prefixStr = output.reverse().join(" ");
+
+  return { prefix: prefixStr, steps };
+}
+
+/* ── UI RENDERERS ── */
+
+function checkBalance(tokens) {
+  let balance = 0;
+  for (let t of tokens) {
+    if (t === '(') balance++;
+    if (t === ')') balance--;
+    if (balance < 0) return false;
+  }
+  return balance === 0;
+}
+
+function renderTable(tableId, steps) {
+  const tbody = document.querySelector(`#${tableId} tbody`);
+  tbody.innerHTML = "";
+  
+  steps.forEach(s => {
+    tbody.innerHTML += `
+      <tr>
+        <td style="color:var(--muted)">${s.step}</td>
+        <td>${formatToken(s.symbol)}</td>
+        <td>${formatStream(s.stack)}</td>
+        <td style="letter-spacing: 1px;">${formatStream(s.output)}</td>
+      </tr>
+    `;
+  });
+}
+
+function generateCode() {
+  const input = document.getElementById('infixInput').value;
+  const tokens = tokenize(input);
+
+  if (tokens.length === 0) return;
+  if (!checkBalance(tokens)) {
+    alert("Unbalanced parentheses in the expression!");
+    return;
+  }
+
+  // Generate Postfix
+  const postResult = infixToPostfix(tokens);
+  document.getElementById('finalPostfix').innerHTML = formatStream(postResult.postfix.split(" "));
+  renderTable('postfixTable', postResult.steps);
+
+  // Generate Prefix
+  const preResult = infixToPrefix(tokens);
+  document.getElementById('finalPrefix').innerHTML = formatStream(preResult.prefix.split(" "));
+  renderTable('prefixTable', preResult.steps);
+}
+
+function switchTab(tabId, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('panel-postfix-trace').classList.toggle('hidden', tabId !== 'postfix-trace');
+  document.getElementById('panel-prefix-trace').classList.toggle('hidden', tabId !== 'prefix-trace');
+}
+
+// Pre-load default
+generateCode();
+
+</script>
+</body>
+</html>
