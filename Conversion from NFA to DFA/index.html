@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>NFA to DFA Converter — Subset Construction</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0d0f14;--card:#13161e;--card2:#1a1d27;--border:#252836;
+  --accent:#00d4ff;--accent2:#70e1ff;--text:#e8eaf0;--muted:#6b7280;
+  --green:#22c55e;--purple:#a78bfa;--orange:#fb923c;--pink:#f472b6;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);
+  padding:20px;line-height:1.6;
+}
+.page{max-width:1100px;margin:0 auto;}
+header{text-align:center;margin-bottom:30px;}
+h1{font-family:'Syne',sans-serif;font-size:32px;background:linear-gradient(135deg,#fff,var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.pill{display:inline-block;padding:4px 12px;background:rgba(0,212,255,0.1);border:1px solid var(--accent);color:var(--accent2);border-radius:999px;font-size:11px;font-weight:800;text-transform:uppercase;margin-bottom:10px;}
+
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+@media(max-width:850px){.grid{grid-template-columns:1fr;}}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,0.3);}
+.card-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:15px;letter-spacing:1px;}
+
+input[type="text"]{
+  width:100%;padding:15px;background:#0a0c12;border:1px solid var(--border);
+  color:var(--accent2);font-family:'JetBrains Mono',monospace;font-size:18px;border-radius:10px;outline:none;
+}
+input[type="text"]:focus{border-color:var(--accent);}
+
+.btn{
+  background:var(--accent);color:#0d0f14;border:none;padding:12px 24px;
+  border-radius:8px;font-weight:700;cursor:pointer;margin-top:15px;width:100%;transition:0.2s;
+}
+.btn:hover{filter:brightness(1.2);transform:translateY(-2px);}
+
+.tab-nav{display:flex;gap:10px;margin-bottom:15px;border-bottom:1px solid var(--border);padding-bottom:10px;}
+.tab{cursor:pointer;font-size:13px;font-weight:600;color:var(--muted);padding:5px 10px;border-radius:5px;}
+.tab.active{color:var(--accent2);background:rgba(0,212,255,0.1);}
+
+.output-area{background:#0a0c12;border-radius:10px;padding:15px;min-height:300px;max-height:500px;overflow:auto;}
+table{width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:13px;}
+th,td{padding:10px;border-bottom:1px solid var(--border);text-align:left; vertical-align: top;}
+th{color:var(--muted);font-size:11px;}
+.state-pill{background:var(--card2);padding:2px 6px;border-radius:4px;border:1px solid var(--border); display:inline-block; margin-bottom: 3px;}
+.dfa-pill{background:rgba(244,114,182,0.1); color:var(--pink); border-color:var(--pink);}
+.eps{color:var(--purple);font-weight:bold;}
+
+.hidden{display:none;}
+.graph-node{margin-bottom:10px;padding:10px;background:var(--card2);border-radius:8px;border-left:4px solid var(--pink);}
+.arrow{color:var(--muted);margin:0 5px;}
+
+footer{margin-top:40px;text-align:center;font-size:12px;color:var(--muted);border-top:1px solid var(--border);padding-top:20px;}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header>
+    <div class="pill">Theory of Computation</div>
+    <h1>NFA → DFA Converter</h1>
+    <p style="color:var(--muted)">Generates NFA from Regex, then applies the Subset Construction Algorithm to generate a DFA.</p>
+  </header>
+
+  <div class="grid">
+    <div class="card">
+      <div class="card-title">Input Expression</div>
+      <input type="text" id="regexInput" value="(a|b)*abb" placeholder="e.g. (a|b)*abb">
+      <button class="btn" onclick="convert()">Construct NFA & DFA</button>
+      
+      <div style="margin-top:25px;">
+        <div class="card-title">Supported Syntax</div>
+        <ul style="font-size:13px; color:var(--muted); padding-left:20px;">
+          <li><b style="color:var(--text)">a, b, c...</b> : Literal symbols</li>
+          <li><b style="color:var(--text)">|</b> : Union (OR)</li>
+          <li><b style="color:var(--text)">*</b> : Kleene Star (0 or more)</li>
+          <li><b style="color:var(--text)">( )</b> : Grouping</li>
+          <li><b style="color:var(--text)">ab</b> : Concatenation</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="tab-nav">
+        <div class="tab active" onclick="switchTab('dfa-table', this)">DFA Table</div>
+        <div class="tab" onclick="switchTab('nfa-table', this)">NFA Table (Source)</div>
+        <div class="tab" onclick="switchTab('dfa-graph', this)">DFA List</div>
+      </div>
+
+      <div id="panel-dfa-table" class="output-area">
+        <table id="dfaTable">
+          <thead>
+            <tr>
+              <th>DFA State</th>
+              <th>NFA States (ε-Closure)</th>
+              <th>Transitions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td colspan="3" style="text-align:center; color:var(--muted); padding:40px;">Enter a regex and click Construct.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div id="panel-nfa-table" class="output-area hidden">
+        <table id="nfaTable">
+          <thead>
+            <tr>
+              <th>NFA State</th>
+              <th>Transition</th>
+              <th>Next State(s)</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div id="panel-dfa-graph" class="output-area hidden">
+        <div id="graphView"></div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <div>Developed for <strong>Automata Theory Visualization</strong></div>
+    <div style="margin-top:5px">Algorithm: <strong>Subset Construction (NFA to DFA)</strong></div>
+  </footer>
+</div>
+
+<script>
+/* ── THOMPSON CONSTRUCTION LOGIC (NFA) ── */
+
+class State {
+  constructor(id) {
+    this.id = id;
+    this.transitions = {}; // { symbol: [States] }
+    this.isEnd = false;
+  }
+  addTransition(symbol, state) {
+    if (!this.transitions[symbol]) this.transitions[symbol] = [];
+    this.transitions[symbol].push(state);
+  }
+}
+
+class NFA {
+  constructor(start, end) {
+    this.start = start;
+    this.end = end;
+  }
+}
+
+let stateCount = 0;
+function createState() { return new State(stateCount++); }
+
+function fromSymbol(symbol) {
+  let start = createState();
+  let end = createState();
+  start.addTransition(symbol, end);
+  return new NFA(start, end);
+}
+
+function fromUnion(n1, n2) {
+  let start = createState();
+  let end = createState();
+  start.addTransition('ε', n1.start);
+  start.addTransition('ε', n2.start);
+  n1.end.addTransition('ε', end);
+  n2.end.addTransition('ε', end);
+  return new NFA(start, end);
+}
+
+function fromConcat(n1, n2) {
+  n1.end.addTransition('ε', n2.start);
+  return new NFA(n1.start, n2.end);
+}
+
+function fromStar(n1) {
+  let start = createState();
+  let end = createState();
+  start.addTransition('ε', n1.start);
+  start.addTransition('ε', end);
+  n1.end.addTransition('ε', n1.start);
+  n1.end.addTransition('ε', end);
+  return new NFA(start, end);
+}
+
+/* ── REGEX PARSER ── */
+
+function insertConcatSymbols(regex) {
+  let res = "";
+  for (let i = 0; i < regex.length; i++) {
+    let c1 = regex[i];
+    res += c1;
+    if (i + 1 < regex.length) {
+      let c2 = regex[i + 1];
+      if (c1 !== '(' && c1 !== '|' && /[a-z0-9)]/.test(c1) && /[a-z0-9(]/.test(c2)) {
+        res += '.';
+      }
+    }
+  }
+  return res;
+}
+
+function regexToPostFix(regex) {
+  let output = "";
+  let stack = [];
+  let precedence = { '*': 3, '.': 2, '|': 1 };
+  let formatted = insertConcatSymbols(regex);
+
+  for (let char of formatted) {
+    if (/[a-z0-9]/.test(char)) {
+      output += char;
+    } else if (char === '(') {
+      stack.push(char);
+    } else if (char === ')') {
+      while (stack.length && stack[stack.length - 1] !== '(') output += stack.pop();
+      stack.pop();
+    } else {
+      while (stack.length && precedence[stack[stack.length - 1]] >= precedence[char]) {
+        output += stack.pop();
+      }
+      stack.push(char);
+    }
+  }
+  while (stack.length) output += stack.pop();
+  return output;
+}
+
+function constructNFA(postFix) {
+  let stack = [];
+  stateCount = 0;
+  for (let char of postFix) {
+    if (/[a-z0-9]/.test(char)) {
+      stack.push(fromSymbol(char));
+    } else if (char === '*') {
+      stack.push(fromStar(stack.pop()));
+    } else if (char === '|') {
+      let n2 = stack.pop();
+      let n1 = stack.pop();
+      stack.push(fromUnion(n1, n2));
+    } else if (char === '.') {
+      let n2 = stack.pop();
+      let n1 = stack.pop();
+      stack.push(fromConcat(n1, n2));
+    }
+  }
+  return stack.pop();
+}
+
+/* ── SUBSET CONSTRUCTION LOGIC (NFA -> DFA) ── */
+
+function getAlphabet(nfaStates) {
+  let alphabet = new Set();
+  nfaStates.forEach(s => {
+    Object.keys(s.transitions).forEach(sym => {
+      if (sym !== 'ε') alphabet.add(sym);
+    });
+  });
+  return Array.from(alphabet).sort();
+}
+
+// eClosure: Get all states reachable from a set of states via ε
+function eClosure(stateSet) {
+  let stack = [...stateSet];
+  let closure = new Set(stateSet);
+  
+  while (stack.length > 0) {
+    let s = stack.pop();
+    if (s.transitions['ε']) {
+      s.transitions['ε'].forEach(next => {
+        if (!closure.has(next)) {
+          closure.add(next);
+          stack.push(next);
+        }
+      });
+    }
+  }
+  // Return sorted array of states for consistent key generation
+  return Array.from(closure).sort((a, b) => a.id - b.id);
+}
+
+// Move: Get all states reachable from a set of states via a specific symbol
+function move(stateSet, symbol) {
+  let result = new Set();
+  stateSet.forEach(s => {
+    if (s.transitions[symbol]) {
+      s.transitions[symbol].forEach(next => result.add(next));
+    }
+  });
+  return Array.from(result);
+}
+
+function convertToDFA(nfa, allNfaStates) {
+  let alphabet = getAlphabet(allNfaStates);
+  let dfaStates = [];
+  let dfaTransitions = []; 
+  let stateMap = {}; // Maps "0,1,2" -> "D0"
+
+  let dfaIdCounter = 0;
+  const getDfaId = () => `D${dfaIdCounter++}`;
+
+  // Start State (eClosure of NFA start state)
+  let startClosure = eClosure([nfa.start]);
+  let startKey = startClosure.map(s => s.id).join(',');
+  let dfaStartId = getDfaId();
+  
+  stateMap[startKey] = dfaStartId;
+  dfaStates.push({
+    id: dfaStartId,
+    nfaStates: startClosure,
+    isEnd: startClosure.some(s => s.isEnd)
+  });
+
+  let queue = [startKey];
+  let processed = new Set();
+
+  while (queue.length > 0) {
+    let currentKey = queue.shift();
+    if (processed.has(currentKey)) continue;
+    processed.add(currentKey);
+
+    let currentDfaId = stateMap[currentKey];
+    let currentNfaSet = currentKey.split(',').filter(x=>x).map(id => allNfaStates.find(s => s.id == id));
+
+    alphabet.forEach(sym => {
+      let movedSet = move(currentNfaSet, sym);
+      if (movedSet.length === 0) return; // Skip empty (Trap) states to keep visualization clean
+
+      let nextClosure = eClosure(movedSet);
+      let nextKey = nextClosure.map(s => s.id).join(',');
+
+      if (!stateMap[nextKey]) {
+        let newDfaId = getDfaId();
+        stateMap[nextKey] = newDfaId;
+        dfaStates.push({
+          id: newDfaId,
+          nfaStates: nextClosure,
+          isEnd: nextClosure.some(s => s.isEnd)
+        });
+        queue.push(nextKey);
+      }
+
+      dfaTransitions.push({
+        from: currentDfaId,
+        symbol: sym,
+        to: stateMap[nextKey]
+      });
+    });
+  }
+
+  return { dfaStates, dfaTransitions };
+}
+
+/* ── UI CONTROLLER ── */
+
+function getAllNFAStates(nfa) {
+  let visited = new Set();
+  let queue = [nfa.start];
+  visited.add(nfa.start);
+  let allStates = [];
+
+  while (queue.length) {
+    let s = queue.shift();
+    allStates.push(s);
+    for (let sym in s.transitions) {
+      for (let next of s.transitions[sym]) {
+        if (!visited.has(next)) {
+          visited.add(next);
+          queue.push(next);
+        }
+      }
+    }
+  }
+  return allStates.sort((a, b) => a.id - b.id);
+}
+
+function convert() {
+  const input = document.getElementById('regexInput').value;
+  if (!input) return;
+
+  try {
+    const postFix = regexToPostFix(input);
+    const nfa = constructNFA(postFix);
+    nfa.end.isEnd = true;
+    
+    const allNfaStates = getAllNFAStates(nfa);
+    const dfaData = convertToDFA(nfa, allNfaStates);
+    
+    renderNFA(allNfaStates);
+    renderDFA(dfaData);
+
+  } catch (e) {
+    console.error(e);
+    alert("Invalid Regex Syntax");
+  }
+}
+
+function renderNFA(allStates) {
+  const tableBody = document.querySelector('#nfaTable tbody');
+  tableBody.innerHTML = "";
+
+  allStates.forEach(s => {
+    let symbols = Object.keys(s.transitions);
+    if (symbols.length === 0) {
+      tableBody.innerHTML += `<tr>
+        <td><span class="state-pill">S${s.id}</span> ${s.isEnd?'<b>(END)</b>':''}</td>
+        <td colspan="2" style="color:var(--muted)">None</td>
+      </tr>`;
+    }
+    symbols.forEach(sym => {
+      let nextStates = s.transitions[sym].map(ns => `<span class="state-pill">S${ns.id}</span>`).join(" ");
+      tableBody.innerHTML += `<tr>
+        <td><span class="state-pill">S${s.id}</span> ${s.isEnd?'<b>(END)</b>':''}</td>
+        <td><span class="${sym==='ε'?'eps':''}">${sym}</span></td>
+        <td>${nextStates}</td>
+      </tr>`;
+    });
+  });
+}
+
+function renderDFA(dfaData) {
+  const tableBody = document.querySelector('#dfaTable tbody');
+  const graphView = document.getElementById('graphView');
+  tableBody.innerHTML = "";
+  graphView.innerHTML = "";
+
+  const { dfaStates, dfaTransitions } = dfaData;
+
+  dfaStates.forEach(dState => {
+    // Collect specific transitions for this DFA state
+    const myTransitions = dfaTransitions.filter(t => t.from === dState.id);
+    const nfaRep = dState.nfaStates.map(ns => `<span class="state-pill">S${ns.id}</span>`).join(" ");
+
+    let transHtml = "None";
+    if (myTransitions.length > 0) {
+      transHtml = myTransitions.map(t => `<div style="margin-bottom:4px"><span style="color:var(--orange);font-weight:bold">${t.symbol}</span> ──▶ <span class="state-pill dfa-pill">${t.to}</span></div>`).join("");
+    }
+
+    tableBody.innerHTML += `<tr>
+      <td><span class="state-pill dfa-pill">${dState.id}</span> ${dState.isEnd?'<br><b style="color:var(--green);font-size:11px">(END)</b>':''}</td>
+      <td><div style="max-width:300px; line-height: 1.8;">${nfaRep}</div></td>
+      <td>${transHtml}</td>
+    </tr>`;
+
+    if (myTransitions.length > 0) {
+      myTransitions.forEach(t => {
+        graphView.innerHTML += `<div class="graph-node">
+          <span class="state-pill dfa-pill">${dState.id}</span> 
+          <span class="arrow">── ${t.symbol} ──▶</span> 
+          <span class="state-pill dfa-pill">${t.to}</span>
+        </div>`;
+      });
+    } else {
+      graphView.innerHTML += `<div class="graph-node" style="border-left-color: var(--muted)">
+        <span class="state-pill dfa-pill">${dState.id}</span> 
+        <span class="arrow" style="font-size: 11px">(Accepting / No further moves)</span> 
+      </div>`;
+    }
+  });
+}
+
+function switchTab(tabId, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('panel-dfa-table').classList.toggle('hidden', tabId !== 'dfa-table');
+  document.getElementById('panel-nfa-table').classList.toggle('hidden', tabId !== 'nfa-table');
+  document.getElementById('panel-dfa-graph').classList.toggle('hidden', tabId !== 'dfa-graph');
+}
+
+// Initial Run
+convert();
+</script>
+</body>
+</html>
