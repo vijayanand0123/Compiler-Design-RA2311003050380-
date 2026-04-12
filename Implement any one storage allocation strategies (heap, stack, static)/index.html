@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Storage Allocation — Heap Memory Manager</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0d0f14;--card:#13161e;--card2:#1a1d27;--border:#252836;
+  --accent:#00d4ff;--accent2:#70e1ff;--text:#e8eaf0;--muted:#6b7280;
+  --green:#22c55e;--purple:#a78bfa;--orange:#fb923c;--pink:#f472b6;--yellow:#fcd34d;--red:#ef4444;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);
+  padding:20px;line-height:1.6;
+}
+.page{max-width:1200px;margin:0 auto;}
+header{text-align:center;margin-bottom:30px;}
+h1{font-family:'Syne',sans-serif;font-size:32px;background:linear-gradient(135deg,#fff,var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.pill{display:inline-block;padding:4px 12px;background:rgba(0,212,255,0.1);border:1px solid var(--accent);color:var(--accent2);border-radius:999px;font-size:11px;font-weight:800;text-transform:uppercase;margin-bottom:10px;}
+
+.grid{display:grid;grid-template-columns:350px 1fr;gap:20px;}
+@media(max-width:950px){.grid{grid-template-columns:1fr;}}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,0.3);}
+.card-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:15px;letter-spacing:1px;}
+
+input[type="number"], input[type="text"], select{
+  width:100%;padding:12px;background:#0a0c12;border:1px solid var(--border);
+  color:var(--text);font-family:'Inter',sans-serif;font-size:14px;border-radius:8px;outline:none;margin-bottom:15px;
+}
+input:focus, select:focus{border-color:var(--accent);}
+
+.btn{
+  background:var(--accent);color:#0d0f14;border:none;padding:12px 24px;
+  border-radius:8px;font-weight:700;cursor:pointer;width:100%;transition:0.2s;
+}
+.btn:hover{filter:brightness(1.2);transform:translateY(-2px);}
+
+.btn-danger{background:rgba(239, 68, 68, 0.1); color:var(--red); border:1px solid var(--red);}
+.btn-danger:hover{background:var(--red); color:#fff;}
+
+.tab-nav{display:flex;gap:10px;margin-bottom:15px;border-bottom:1px solid var(--border);padding-bottom:10px;overflow-x:auto;}
+.tab{cursor:pointer;font-size:13px;font-weight:600;color:var(--muted);padding:5px 10px;border-radius:5px;white-space:nowrap;}
+.tab.active{color:var(--accent2);background:rgba(0,212,255,0.1);}
+
+.output-area{background:#0a0c12;border-radius:10px;padding:15px;min-height:450px;max-height:650px;overflow:auto;}
+table{width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:13px;}
+th,td{padding:12px 15px;border-bottom:1px solid var(--border); vertical-align: middle; text-align:left;}
+th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:1px;background:var(--card2);position:sticky;top:0;z-index:10;}
+
+/* Memory Map Visualization */
+.memory-map {
+  display: flex; width: 100%; height: 120px; border: 2px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--card2);
+}
+.mem-block {
+  height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  border-right: 1px solid rgba(255,255,255,0.1); font-family: 'JetBrains Mono', monospace; font-size: 12px;
+  transition: width 0.3s ease; overflow: hidden; position: relative;
+}
+.mem-block:last-child { border-right: none; }
+.mem-block.free { background: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,255,255,0.03) 10px, rgba(255,255,255,0.03) 20px); color: var(--muted); }
+.mem-block.alloc { color: #0d0f14; font-weight: bold; }
+.mem-size { font-size: 10px; opacity: 0.8; margin-top: 4px; }
+
+/* Log */
+.log-entry { font-family: 'JetBrains Mono', monospace; font-size: 12px; padding: 8px; border-bottom: 1px solid var(--border); }
+.log-success { color: var(--green); }
+.log-error { color: var(--red); }
+.log-info { color: var(--accent2); }
+
+.hidden{display:none;}
+.notice{font-size:12px;color:var(--accent2);background:rgba(0,212,255,0.1);padding:10px;border-radius:6px;border-left:3px solid var(--accent);margin-top:15px;line-height:1.4;}
+
+footer{margin-top:40px;text-align:center;font-size:12px;color:var(--muted);border-top:1px solid var(--border);padding-top:20px;}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header>
+    <div class="pill">Runtime Environment</div>
+    <h1>Storage Allocation Strategies</h1>
+    <p style="color:var(--muted)">Interactive simulator for Heap Memory Management algorithms.</p>
+  </header>
+
+  <div class="grid">
+    <div>
+      <div class="card" style="margin-bottom: 20px;">
+        <div class="card-title">Allocate Memory</div>
+        <label style="font-size:12px;color:var(--muted);">Block Size (KB)</label>
+        <input type="number" id="allocSize" placeholder="e.g. 150" min="1">
+        
+        <label style="font-size:12px;color:var(--muted);">Strategy</label>
+        <select id="allocStrategy">
+          <option value="first">First-Fit (First block large enough)</option>
+          <option value="best">Best-Fit (Smallest block large enough)</option>
+          <option value="worst">Worst-Fit (Largest block available)</option>
+        </select>
+        
+        <button class="btn" onclick="allocateMemory()">Malloc()</button>
+      </div>
+
+      <div class="card" style="margin-bottom: 20px;">
+        <div class="card-title">Free Memory</div>
+        <label style="font-size:12px;color:var(--muted);">Block ID to Free</label>
+        <input type="text" id="freeId" placeholder="e.g. P1">
+        <button class="btn btn-danger" onclick="freeMemory()">Free()</button>
+      </div>
+      
+      <div class="card">
+        <button class="btn" style="background:var(--card2); color:var(--text); border:1px solid var(--border);" onclick="resetMemory()">Reset Heap</button>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="tab-nav">
+          <div class="tab active" onclick="switchTab('visual', this)">Memory Map</div>
+          <div class="tab" onclick="switchTab('table', this)">Block Table</div>
+          <div class="tab" onclick="switchTab('log', this)">Action Log</div>
+        </div>
+
+        <div id="panel-visual" class="output-area">
+          <div class="card-title">Contiguous Heap Segment (1000 KB)</div>
+          <div class="memory-map" id="memoryMap">
+            </div>
+          
+          <div class="notice" style="margin-top:25px;">
+            <strong>Concepts Demonstrated:</strong><br><br>
+            • <b>Fragmentation:</b> Freeing blocks in random order causes external fragmentation (scattered free holes).<br>
+            • <b>Coalescing:</b> Notice how adjacent free blocks automatically merge together to form a larger block.<br>
+            • <b>Strategies:</b> Try <i>Best-Fit</i> to leave tiny unusable holes, or <i>Worst-Fit</i> to rapidly divide large free spaces.
+          </div>
+        </div>
+
+        <div id="panel-table" class="output-area hidden">
+          <table id="blockTable">
+            <thead>
+              <tr>
+                <th width="20%">Status</th>
+                <th width="20%">Block ID</th>
+                <th width="20%">Size (KB)</th>
+                <th width="20%">Start Addr</th>
+                <th width="20%">End Addr</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div id="panel-log" class="output-area hidden" style="background:#080a10;">
+          <div id="logContainer"></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <div>Developed for <strong>Operating Systems & Runtime Storage Allocation</strong></div>
+  </footer>
+</div>
+
+<script>
+/* ── HEAP MEMORY STATE ── */
+const TOTAL_MEMORY = 1000;
+let memory = [];
+let processCounter = 1;
+
+// Color palette for allocated blocks
+const colors = ['#00d4ff', '#70e1ff', '#fcd34d', '#f472b6', '#a78bfa', '#fb923c', '#22c55e'];
+
+function initMemory() {
+  memory = [{
+    type: 'free',
+    id: 'Free',
+    size: TOTAL_MEMORY,
+    start: 0,
+    color: 'transparent'
+  }];
+  processCounter = 1;
+  document.getElementById('logContainer').innerHTML = "";
+  logAction("System initialized. Total Heap Size: 1000 KB", "info");
+  renderAll();
+}
+
+function resetMemory() {
+  initMemory();
+}
+
+/* ── ALLOCATION ALGORITHMS ── */
+
+function allocateMemory() {
+  const sizeInput = document.getElementById('allocSize').value;
+  const size = parseInt(sizeInput);
+  const strategy = document.getElementById('allocStrategy').value;
+
+  if (isNaN(size) || size <= 0) {
+    logAction(`Allocation failed: Invalid size requested.`, "error");
+    return;
+  }
+  if (size > TOTAL_MEMORY) {
+    logAction(`Allocation failed: Requested ${size}KB exceeds total heap size.`, "error");
+    return;
+  }
+
+  let targetIdx = -1;
+
+  if (strategy === 'first') {
+    // FIRST FIT: First block that is large enough
+    targetIdx = memory.findIndex(b => b.type === 'free' && b.size >= size);
+  } 
+  else if (strategy === 'best') {
+    // BEST FIT: Smallest free block that is large enough
+    let minDiff = Infinity;
+    memory.forEach((b, i) => {
+      if (b.type === 'free' && b.size >= size) {
+        if (b.size - size < minDiff) {
+          minDiff = b.size - size;
+          targetIdx = i;
+        }
+      }
+    });
+  } 
+  else if (strategy === 'worst') {
+    // WORST FIT: Largest free block available
+    let maxDiff = -1;
+    memory.forEach((b, i) => {
+      if (b.type === 'free' && b.size >= size) {
+        if (b.size - size > maxDiff) {
+          maxDiff = b.size - size;
+          targetIdx = i;
+        }
+      }
+    });
+  }
+
+  if (targetIdx === -1) {
+    logAction(`Allocation failed: Out of memory or External Fragmentation prevents fulfilling ${size}KB.`, "error");
+    return;
+  }
+
+  // Allocate from target hole
+  let hole = memory[targetIdx];
+  let procId = 'P' + processCounter++;
+  let color = colors[processCounter % colors.length];
+  
+  let newBlock = { type: 'alloc', id: procId, size: size, start: hole.start, color: color };
+
+  if (hole.size === size) {
+    // Exact match, replace hole
+    memory[targetIdx] = newBlock;
+  } else {
+    // Split hole
+    let remainingHole = { 
+      type: 'free', 
+      id: 'Free', 
+      size: hole.size - size, 
+      start: hole.start + size, 
+      color: 'transparent' 
+    };
+    memory.splice(targetIdx, 1, newBlock, remainingHole);
+  }
+
+  logAction(`Allocated ${procId} (${size}KB) using ${strategy.toUpperCase()}-FIT at address ${newBlock.start}.`, "success");
+  renderAll();
+}
+
+/* ── DEALLOCATION ALGORITHM ── */
+
+function freeMemory() {
+  const idInput = document.getElementById('freeId').value.trim();
+  if (!idInput) return;
+
+  // Case insensitive match
+  let targetIdx = memory.findIndex(b => b.type === 'alloc' && b.id.toLowerCase() === idInput.toLowerCase());
+
+  if (targetIdx === -1) {
+    logAction(`Free failed: Block ID '${idInput}' not found in memory.`, "error");
+    return;
+  }
+
+  let block = memory[targetIdx];
+  block.type = 'free';
+  block.id = 'Free';
+  block.color = 'transparent';
+
+  logAction(`Freed block ${idInput.toUpperCase()} (${block.size}KB).`, "info");
+  
+  coalesce();
+  renderAll();
+}
+
+function coalesce() {
+  let merged = false;
+  for (let i = 0; i < memory.length - 1; i++) {
+    if (memory[i].type === 'free' && memory[i+1].type === 'free') {
+      let sizeBefore = memory[i].size + memory[i+1].size;
+      memory[i].size += memory[i+1].size;
+      memory.splice(i+1, 1);
+      merged = true;
+      i--; // Check current index again in case of 3+ consecutive holes
+    }
+  }
+  if (merged) {
+    logAction("Coalesced adjacent free blocks into a larger segment.", "info");
+  }
+}
+
+/* ── UI RENDERING & LOGGING ── */
+
+function logAction(msg, type) {
+  const logDiv = document.getElementById('logContainer');
+  const d = new Date();
+  const time = d.toLocaleTimeString([], {hour12: false, hour: '2-digit', minute:'2-digit', second:'2-digit'});
+  let colorClass = type === 'success' ? 'log-success' : (type === 'error' ? 'log-error' : 'log-info');
+  
+  logDiv.innerHTML += `<div class="log-entry"><span style="color:var(--muted)">[${time}]</span> <span class="${colorClass}">${msg}</span></div>`;
+  
+  // Auto scroll to bottom
+  const panel = document.getElementById('panel-log');
+  panel.scrollTop = panel.scrollHeight;
+}
+
+function renderAll() {
+  renderVisualMap();
+  renderTable();
+}
+
+function renderVisualMap() {
+  const mapDiv = document.getElementById('memoryMap');
+  mapDiv.innerHTML = "";
+
+  memory.forEach(b => {
+    let widthPct = (b.size / TOTAL_MEMORY) * 100;
+    
+    let blockDiv = document.createElement('div');
+    blockDiv.className = `mem-block ${b.type}`;
+    blockDiv.style.width = `${widthPct}%`;
+    
+    if (b.type === 'alloc') {
+      blockDiv.style.backgroundColor = b.color;
+      // Only show text if wide enough to be readable
+      if (widthPct > 3) {
+        blockDiv.innerHTML = `<div>${b.id}</div><div class="mem-size">${b.size}K</div>`;
+      }
+    } else {
+      if (widthPct > 5) {
+        blockDiv.innerHTML = `<div>Free</div><div class="mem-size">${b.size}K</div>`;
+      }
+    }
+    
+    mapDiv.appendChild(blockDiv);
+  });
+}
+
+function renderTable() {
+  const tbody = document.querySelector('#blockTable tbody');
+  tbody.innerHTML = "";
+
+  memory.forEach(b => {
+    let statusHtml = b.type === 'alloc' 
+      ? `<span style="color:var(--pink);font-weight:bold;">Allocated</span>` 
+      : `<span style="color:var(--muted)">Free Hole</span>`;
+      
+    let idHtml = b.type === 'alloc' 
+      ? `<span style="color:${b.color};font-weight:bold;">${b.id}</span>` 
+      : `<span style="color:var(--muted)">-</span>`;
+
+    tbody.innerHTML += `
+      <tr>
+        <td>${statusHtml}</td>
+        <td>${idHtml}</td>
+        <td style="color:var(--accent2); font-family:'JetBrains Mono'">${b.size}</td>
+        <td style="font-family:'JetBrains Mono'">${b.start}</td>
+        <td style="font-family:'JetBrains Mono'">${b.start + b.size - 1}</td>
+      </tr>
+    `;
+  });
+}
+
+function switchTab(tabId, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('panel-visual').classList.toggle('hidden', tabId !== 'visual');
+  document.getElementById('panel-table').classList.toggle('hidden', tabId !== 'table');
+  document.getElementById('panel-log').classList.toggle('hidden', tabId !== 'log');
+}
+
+// Start
+initMemory();
+
+</script>
+</body>
+</html>
