@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>LEADING & TRAILING Sets Calculator</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0d0f14;--card:#13161e;--card2:#1a1d27;--border:#252836;
+  --accent:#00d4ff;--accent2:#70e1ff;--text:#e8eaf0;--muted:#6b7280;
+  --green:#22c55e;--purple:#a78bfa;--orange:#fb923c;--pink:#f472b6;--yellow:#fcd34d;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);
+  padding:20px;line-height:1.6;
+}
+.page{max-width:1100px;margin:0 auto;}
+header{text-align:center;margin-bottom:30px;}
+h1{font-family:'Syne',sans-serif;font-size:32px;background:linear-gradient(135deg,#fff,var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.pill{display:inline-block;padding:4px 12px;background:rgba(0,212,255,0.1);border:1px solid var(--accent);color:var(--accent2);border-radius:999px;font-size:11px;font-weight:800;text-transform:uppercase;margin-bottom:10px;}
+
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+@media(max-width:850px){.grid{grid-template-columns:1fr;}}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,0.3);}
+.card-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:15px;letter-spacing:1px;}
+
+textarea{
+  width:100%;height:180px;padding:15px;background:#0a0c12;border:1px solid var(--border);
+  color:var(--accent2);font-family:'JetBrains Mono',monospace;font-size:15px;border-radius:10px;outline:none;resize:vertical;
+}
+textarea:focus{border-color:var(--accent);}
+
+.btn{
+  background:var(--accent);color:#0d0f14;border:none;padding:12px 24px;
+  border-radius:8px;font-weight:700;cursor:pointer;margin-top:15px;width:100%;transition:0.2s;
+}
+.btn:hover{filter:brightness(1.2);transform:translateY(-2px);}
+
+.tab-nav{display:flex;gap:10px;margin-bottom:15px;border-bottom:1px solid var(--border);padding-bottom:10px;overflow-x:auto;}
+.tab{cursor:pointer;font-size:13px;font-weight:600;color:var(--muted);padding:5px 10px;border-radius:5px;white-space:nowrap;}
+.tab.active{color:var(--accent2);background:rgba(0,212,255,0.1);}
+
+.output-area{background:#0a0c12;border-radius:10px;padding:15px;min-height:350px;max-height:500px;overflow:auto;}
+table{width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:14px;}
+th,td{padding:12px 10px;border-bottom:1px solid var(--border);text-align:left; vertical-align: top;}
+th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:1px;}
+.non-terminal{color:var(--pink);font-weight:bold;}
+.terminal{color:var(--green);}
+.arrow{color:var(--muted);margin:0 8px;}
+.epsilon{color:var(--purple);font-style:italic;}
+.set-brace{color:var(--muted);font-weight:normal;}
+
+.hidden{display:none;}
+.notice{font-size:12px;color:var(--accent2);background:rgba(0,212,255,0.1);padding:10px;border-radius:6px;border-left:3px solid var(--accent);margin-top:15px;line-height:1.4;}
+
+footer{margin-top:40px;text-align:center;font-size:12px;color:var(--muted);border-top:1px solid var(--border);padding-top:20px;}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header>
+    <div class="pill">Compiler Design</div>
+    <h1>LEADING & TRAILING Sets</h1>
+    <p style="color:var(--muted)">Compute Operator Precedence constraints for Bottom-Up parsers.</p>
+  </header>
+
+  <div class="grid">
+    <div class="card">
+      <div class="card-title">Input Grammar</div>
+      <textarea id="grammarInput" placeholder="E -> E + T | T&#10;T -> T * F | F&#10;F -> ( E ) | id"></textarea>
+      <button class="btn" onclick="computeSets()">Compute Sets</button>
+      
+      <div class="notice">
+        <strong>Algorithm Note:</strong> For Operator Grammars, LEADING and TRAILING sets search for the first/last <b>terminal</b>. They look past a single leading or trailing non-terminal if necessary to find it.
+      </div>
+
+      <div style="margin-top:25px;">
+        <div class="card-title">Syntax Rules</div>
+        <ul style="font-size:13px; color:var(--muted); padding-left:20px;">
+          <li>Use <b style="color:var(--text)">-></b> to separate LHS and RHS.</li>
+          <li>Use <b style="color:var(--text)">|</b> to separate multiple productions.</li>
+          <li>Separate all tokens (terminals and non-terminals) with <b>spaces</b> (e.g., <b style="color:var(--text)">E + T</b>).</li>
+          <li>Operator grammars generally do not use Epsilon (<b style="color:var(--text)">ε</b>).</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="tab-nav">
+        <div class="tab active" onclick="switchTab('parsed-table', this)">1. Parsed Grammar</div>
+        <div class="tab" onclick="switchTab('leading-table', this)">2. LEADING Sets</div>
+        <div class="tab" onclick="switchTab('trailing-table', this)">3. TRAILING Sets</div>
+      </div>
+
+      <div id="panel-parsed-table" class="output-area">
+        <table id="parsedTable">
+          <thead><tr><th width="30%">Non-Terminal</th><th>Productions</th></tr></thead>
+          <tbody>
+            <tr><td colspan="2" style="text-align:center; color:var(--muted); padding:40px;">Enter grammar and click Compute.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div id="panel-leading-table" class="output-area hidden">
+        <table id="leadingTable">
+          <thead><tr><th width="30%">Non-Terminal</th><th>LEADING(X)</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div id="panel-trailing-table" class="output-area hidden">
+        <table id="trailingTable">
+          <thead><tr><th width="30%">Non-Terminal</th><th>TRAILING(X)</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <div>Developed for <strong>Operator Precedence Parsing Analysis</strong></div>
+  </footer>
+</div>
+
+<script>
+/* ── GRAMMAR DATA STRUCTURES ── */
+const EPSILON = "ε";
+
+function isTerminal(symbol, order) {
+  // Anything not in the LHS order list and not epsilon is a terminal
+  return !order.includes(symbol) && symbol !== EPSILON;
+}
+
+function parseInput(text) {
+  let lines = text.split('\n');
+  let grammar = {};
+  let order = [];
+
+  lines.forEach(line => {
+    line = line.trim();
+    if (!line) return;
+    
+    // Support '->' or '→'
+    let parts = line.split(/\s*(?:->|→)\s*/);
+    if (parts.length !== 2) return;
+
+    let lhs = parts[0].trim();
+    if (!grammar[lhs]) {
+      grammar[lhs] = [];
+      order.push(lhs);
+    }
+
+    let rhsStrings = parts[1].split(/\s*\|\s*/);
+    rhsStrings.forEach(rhs => {
+      let tokens = rhs.trim().split(/\s+/).map(t => (t === 'e' || t === 'eps') ? EPSILON : t);
+      grammar[lhs].push(tokens);
+    });
+  });
+
+  return { grammar, order };
+}
+
+/* ── COMPUTE LEADING SETS ── */
+function computeLeadingSets(grammar, order) {
+  let leading = {};
+  order.forEach(nt => leading[nt] = new Set());
+
+  let changed = true;
+  while(changed) {
+    changed = false;
+    
+    for (let nt of order) {
+      let productions = grammar[nt];
+      
+      for (let prod of productions) {
+        if (prod.length === 0 || prod[0] === EPSILON) continue;
+
+        let beforeSize = leading[nt].size;
+
+        // Rule 1 & 2 Check: Look at first symbol
+        let firstSym = prod[0];
+        if (isTerminal(firstSym, order)) {
+          // It's a terminal, add to LEADING
+          leading[nt].add(firstSym);
+        } else {
+          // It's a non-terminal, add its LEADING elements
+          leading[firstSym].forEach(val => leading[nt].add(val));
+          
+          // Rule 3 Check: If first is Non-Terminal, check the SECOND symbol to see if it's a Terminal
+          if (prod.length > 1) {
+            let secondSym = prod[1];
+            if (isTerminal(secondSym, order)) {
+              leading[nt].add(secondSym);
+            }
+          }
+        }
+        
+        if (leading[nt].size > beforeSize) changed = true;
+      }
+    }
+  }
+  return leading;
+}
+
+/* ── COMPUTE TRAILING SETS ── */
+function computeTrailingSets(grammar, order) {
+  let trailing = {};
+  order.forEach(nt => trailing[nt] = new Set());
+
+  let changed = true;
+  while(changed) {
+    changed = false;
+    
+    for (let nt of order) {
+      let productions = grammar[nt];
+      
+      for (let prod of productions) {
+        if (prod.length === 0 || prod[0] === EPSILON) continue;
+
+        let beforeSize = trailing[nt].size;
+        let lastIdx = prod.length - 1;
+
+        // Rule 1 & 2 Check: Look at last symbol
+        let lastSym = prod[lastIdx];
+        if (isTerminal(lastSym, order)) {
+          // It's a terminal, add to TRAILING
+          trailing[nt].add(lastSym);
+        } else {
+          // It's a non-terminal, add its TRAILING elements
+          trailing[lastSym].forEach(val => trailing[nt].add(val));
+          
+          // Rule 3 Check: If last is Non-Terminal, check the SECOND-TO-LAST symbol
+          if (prod.length > 1) {
+            let secondLastSym = prod[lastIdx - 1];
+            if (isTerminal(secondLastSym, order)) {
+              trailing[nt].add(secondLastSym);
+            }
+          }
+        }
+        
+        if (trailing[nt].size > beforeSize) changed = true;
+      }
+    }
+  }
+  return trailing;
+}
+
+/* ── UI RENDERERS ── */
+
+function formatToken(t, allNTs) {
+  if (t === EPSILON) return `<span class="epsilon">${t}</span>`;
+  if (allNTs.includes(t)) return `<span class="non-terminal">${t}</span>`;
+  return `<span class="terminal">${t}</span>`;
+}
+
+function renderGrammarTable(tableId, grammarObj) {
+  const tbody = document.querySelector(`#${tableId} tbody`);
+  tbody.innerHTML = "";
+  
+  if(grammarObj.order.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="2" style="text-align:center; color:var(--muted); padding:40px;">No valid grammar found.</td></tr>`;
+    return;
+  }
+
+  grammarObj.order.forEach(nt => {
+    let prods = grammarObj.grammar[nt];
+    if(!prods) return;
+    
+    let htmlRhs = prods.map(prod => {
+      return prod.map(token => formatToken(token, grammarObj.order)).join(" ");
+    }).join(` <span style="color:var(--muted); margin: 0 10px;">|</span> `);
+
+    tbody.innerHTML += `
+      <tr>
+        <td class="non-terminal" style="font-size:16px;">${nt}</td>
+        <td style="font-size:16px;"><span class="arrow">-></span> ${htmlRhs}</td>
+      </tr>
+    `;
+  });
+}
+
+function renderSetTable(tableId, setObj, order) {
+  const tbody = document.querySelector(`#${tableId} tbody`);
+  tbody.innerHTML = "";
+
+  order.forEach(nt => {
+    let items = Array.from(setObj[nt]);
+    // Sort alphabetically for clean display
+    items.sort((a, b) => a.localeCompare(b));
+
+    let htmlItems = items.map(t => formatToken(t, order)).join(", ");
+    
+    tbody.innerHTML += `
+      <tr>
+        <td class="non-terminal" style="font-size:16px;">${nt}</td>
+        <td style="font-size:16px;"><span class="set-brace">{</span> ${htmlItems} <span class="set-brace">}</span></td>
+      </tr>
+    `;
+  });
+}
+
+function computeSets() {
+  const text = document.getElementById('grammarInput').value;
+  
+  // Step 1: Parse
+  const parsed = parseInput(text);
+  renderGrammarTable('parsedTable', parsed);
+
+  // Step 2: LEADING Sets
+  const leadingSets = computeLeadingSets(parsed.grammar, parsed.order);
+  renderSetTable('leadingTable', leadingSets, parsed.order);
+
+  // Step 3: TRAILING Sets
+  const trailingSets = computeTrailingSets(parsed.grammar, parsed.order);
+  renderSetTable('trailingTable', trailingSets, parsed.order);
+  
+  // Show the LEADING sets tab to demonstrate processing complete
+  document.querySelectorAll('.tab')[1].click();
+}
+
+function switchTab(tabId, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('panel-parsed-table').classList.toggle('hidden', tabId !== 'parsed-table');
+  document.getElementById('panel-leading-table').classList.toggle('hidden', tabId !== 'leading-table');
+  document.getElementById('panel-trailing-table').classList.toggle('hidden', tabId !== 'trailing-table');
+}
+
+// Pre-load default (A classic Operator Precedence Grammar)
+document.getElementById('grammarInput').value = 
+`E -> E + T | T
+T -> T * F | F
+F -> ( E ) | id`;
+
+computeSets();
+
+</script>
+</body>
+</html>
