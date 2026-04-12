@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Shift-Reduce Parsing Simulator</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0d0f14;--card:#13161e;--card2:#1a1d27;--border:#252836;
+  --accent:#00d4ff;--accent2:#70e1ff;--text:#e8eaf0;--muted:#6b7280;
+  --green:#22c55e;--purple:#a78bfa;--orange:#fb923c;--pink:#f472b6;--yellow:#fcd34d;--red:#ef4444;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);
+  padding:20px;line-height:1.6;
+}
+.page{max-width:1200px;margin:0 auto;}
+header{text-align:center;margin-bottom:30px;}
+h1{font-family:'Syne',sans-serif;font-size:32px;background:linear-gradient(135deg,#fff,var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.pill{display:inline-block;padding:4px 12px;background:rgba(0,212,255,0.1);border:1px solid var(--accent);color:var(--accent2);border-radius:999px;font-size:11px;font-weight:800;text-transform:uppercase;margin-bottom:10px;}
+
+.grid{display:grid;grid-template-columns:350px 1fr;gap:20px;}
+@media(max-width:950px){.grid{grid-template-columns:1fr;}}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,0.3);}
+.card-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:15px;letter-spacing:1px;}
+
+textarea, input[type="text"]{
+  width:100%;padding:15px;background:#0a0c12;border:1px solid var(--border);
+  color:var(--accent2);font-family:'JetBrains Mono',monospace;font-size:14px;border-radius:10px;outline:none;
+}
+textarea{height:180px;resize:vertical;white-space:pre;}
+textarea:focus, input[type="text"]:focus{border-color:var(--accent);}
+
+.btn{
+  background:var(--accent);color:#0d0f14;border:none;padding:12px 24px;
+  border-radius:8px;font-weight:700;cursor:pointer;margin-top:15px;width:100%;transition:0.2s;
+}
+.btn:hover{filter:brightness(1.2);transform:translateY(-2px);}
+
+.tab-nav{display:flex;gap:10px;margin-bottom:15px;border-bottom:1px solid var(--border);padding-bottom:10px;overflow-x:auto;}
+.tab{cursor:pointer;font-size:13px;font-weight:600;color:var(--muted);padding:5px 10px;border-radius:5px;white-space:nowrap;}
+.tab.active{color:var(--accent2);background:rgba(0,212,255,0.1);}
+
+.output-area{background:#0a0c12;border-radius:10px;padding:15px;min-height:450px;max-height:650px;overflow:auto;}
+table{width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:14px;}
+th,td{padding:12px 15px;border-bottom:1px solid var(--border); vertical-align: middle;}
+th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:1px;background:var(--card2);position:sticky;top:0;z-index:10;text-align:left;}
+
+.non-terminal{color:var(--pink);font-weight:bold;}
+.terminal{color:var(--green);}
+.arrow{color:var(--muted);margin:0 5px;}
+.epsilon{color:var(--purple);font-style:italic;}
+.eof{color:var(--yellow);font-weight:bold;}
+
+.hidden{display:none;}
+.notice{font-size:12px;color:var(--accent2);background:rgba(0,212,255,0.1);padding:10px;border-radius:6px;border-left:3px solid var(--accent);margin-top:15px;line-height:1.4;}
+.error-msg{font-size:13px;color:var(--red);background:rgba(239, 68, 68, 0.1);padding:15px;border-radius:8px;border-left:4px solid var(--red);margin-top:10px;}
+
+footer{margin-top:40px;text-align:center;font-size:12px;color:var(--muted);border-top:1px solid var(--border);padding-top:20px;}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header>
+    <div class="pill">Compiler Design</div>
+    <h1>Shift-Reduce Parsing Simulator</h1>
+    <p style="color:var(--muted)">Visualizes the Bottom-Up rightmost derivation in reverse.</p>
+  </header>
+
+  <div class="grid">
+    <div>
+      <div class="card">
+        <div class="card-title">1. Input Grammar</div>
+        <textarea id="grammarInput" placeholder="E -> E + T | T&#10;T -> T * F | F&#10;F -> ( E ) | id"></textarea>
+
+        <div class="card-title" style="margin-top:20px;">2. Input String</div>
+        <input type="text" id="inputString" value="id + id * id" placeholder="e.g. id + id * id">
+        
+        <button class="btn" onclick="simulateParse()">Parse String</button>
+        
+        <div class="notice">
+          <strong>How it works:</strong> The simulator uses a Breadth-First Search (BFS) algorithm to discover the valid sequence of Shifts and Reduces that successfully parses the input string back to the Start Symbol.
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="tab-nav">
+          <div class="tab active" onclick="switchTab('trace-table', this)">Parse Trace</div>
+          <div class="tab" onclick="switchTab('parsed-grammar', this)">Parsed Grammar</div>
+        </div>
+
+        <div id="panel-trace-table" class="output-area">
+          <div id="errorContainer" class="hidden"></div>
+          <table id="traceTable">
+            <thead>
+              <tr>
+                <th width="10%">Step</th>
+                <th width="35%">Stack</th>
+                <th width="35%" style="text-align:right;">Input Buffer</th>
+                <th width="20%">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="4" style="text-align:center; color:var(--muted); padding:40px;">Enter a string and click Parse String.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div id="panel-parsed-grammar" class="output-area hidden">
+          <table id="parsedTable">
+            <thead><tr><th width="30%">Non-Terminal</th><th>Productions</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <div>Developed for <strong>Bottom-Up Parsing Visualization</strong></div>
+  </footer>
+</div>
+
+<script>
+/* ── DATA STRUCTURES & PARSING ── */
+const EPSILON = "ε";
+const EOF_MARKER = "$";
+
+function parseGrammar(text) {
+  let lines = text.split('\n');
+  let grammar = {};
+  let order = [];
+
+  lines.forEach(line => {
+    line = line.trim();
+    if (!line) return;
+    
+    let parts = line.split(/\s*(?:->|→)\s*/);
+    if (parts.length !== 2) return;
+
+    let lhs = parts[0].trim();
+    if (!grammar[lhs]) {
+      grammar[lhs] = [];
+      order.push(lhs);
+    }
+
+    let rhsStrings = parts[1].split(/\s*\|\s*/);
+    rhsStrings.forEach(rhs => {
+      let tokens = rhs.trim().split(/\s+/).map(t => (t === 'e' || t === 'eps') ? EPSILON : t);
+      grammar[lhs].push(tokens);
+    });
+  });
+
+  return { grammar, order };
+}
+
+/* ── SHIFT-REDUCE BFS ALGORITHM ── */
+function findShiftReduceSequence(grammarObj, inputString) {
+  let tokens = inputString.trim().split(/\s+/).filter(x => x);
+  if (grammarObj.order.length === 0) return { error: "Grammar is empty or invalid." };
+  
+  let startSymbol = grammarObj.order[0];
+  
+  // BFS Queue: state holds stack, remaining input index, and historical steps
+  let queue = [{
+    stack: [],
+    inputIndex: 0,
+    steps: [{
+      stack: "$",
+      input: tokens.join(" ") + (tokens.length > 0 ? " $" : "$"),
+      action: "Start"
+    }]
+  }];
+
+  let visited = new Set();
+  let maxIterations = 50000;
+  let iter = 0;
+
+  while(queue.length > 0) {
+    iter++;
+    if (iter > maxIterations) {
+      return { error: "Search exceeded maximum iterations. The string may be invalid, or the grammar is too complex for basic unguided search." };
+    }
+
+    let current = queue.shift();
+    let stateKey = current.stack.join(" ") + "|" + current.inputIndex;
+    
+    if (visited.has(stateKey)) continue;
+    visited.add(stateKey);
+
+    // ── Accept Condition ──
+    if (current.inputIndex === tokens.length && current.stack.length === 1 && current.stack[0] === startSymbol) {
+      let finalSteps = [...current.steps, {
+        stack: "$ " + current.stack.join(" "),
+        input: "$",
+        action: "Accept"
+      }];
+      return { steps: finalSteps };
+    }
+
+    // ── Generate Next States ──
+
+    // 1. SHIFT (Only if input remains)
+    if (current.inputIndex < tokens.length) {
+      let tok = tokens[current.inputIndex];
+      let newStack = [...current.stack, tok];
+      let inputStr = tokens.slice(current.inputIndex + 1).join(" ") + " $";
+      if (inputStr.trim() === "$") inputStr = "$";
+      
+      queue.push({
+        stack: newStack,
+        inputIndex: current.inputIndex + 1,
+        steps: [...current.steps, {
+          stack: "$ " + newStack.join(" "),
+          input: inputStr,
+          action: "Shift"
+        }]
+      });
+    }
+
+    // 2. REDUCE (Check all grammar rules against top of stack)
+    for (let nt of grammarObj.order) {
+      let prods = grammarObj.grammar[nt];
+      
+      for (let prod of prods) {
+        let rhsLen = prod[0] === EPSILON ? 0 : prod.length;
+        
+        if (current.stack.length >= rhsLen) {
+          let match = true;
+          
+          if (rhsLen > 0) {
+            for (let i = 0; i < rhsLen; i++) {
+              if (current.stack[current.stack.length - rhsLen + i] !== prod[i]) {
+                match = false; break;
+              }
+            }
+          }
+
+          // Prevent trivial infinite Epsilon reduction loops
+          if (rhsLen === 0 && current.stack.length > 0 && current.stack[current.stack.length - 1] === nt) {
+            match = false;
+          }
+
+          if (match) {
+            let newStack = current.stack.slice(0, current.stack.length - rhsLen);
+            newStack.push(nt);
+            
+            let inputStr = tokens.slice(current.inputIndex).join(" ") + " $";
+            if (inputStr.trim() === "$") inputStr = "$";
+
+            queue.push({
+              stack: newStack,
+              inputIndex: current.inputIndex,
+              steps: [...current.steps, {
+                stack: "$ " + newStack.join(" "),
+                input: inputStr,
+                action: `Reduce ${nt} -> ${prod.join(" ")}`
+              }]
+            });
+          }
+        }
+      }
+    }
+  }
+
+  return { error: "String Rejected. No valid shift-reduce sequence found to reach the start symbol." };
+}
+
+/* ── UI RENDERERS ── */
+
+function formatToken(t, order) {
+  if (t === EPSILON) return `<span class="epsilon">${t}</span>`;
+  if (t === EOF_MARKER) return `<span class="eof">${t}</span>`;
+  if (order.includes(t)) return `<span class="non-terminal">${t}</span>`;
+  return `<span class="terminal">${t}</span>`;
+}
+
+function formatStream(str, order) {
+  let tokens = str.split(" ").filter(x=>x);
+  return tokens.map(t => formatToken(t, order)).join(" ");
+}
+
+function renderGrammarTable(grammarObj) {
+  const tbody = document.querySelector(`#parsedTable tbody`);
+  tbody.innerHTML = "";
+  
+  if(grammarObj.order.length === 0) return;
+
+  grammarObj.order.forEach(nt => {
+    let prods = grammarObj.grammar[nt];
+    let htmlRhs = prods.map(prod => {
+      return prod.map(token => formatToken(token, grammarObj.order)).join(" ");
+    }).join(` <span style="color:var(--muted); margin: 0 10px;">|</span> `);
+
+    tbody.innerHTML += `<tr><td class="non-terminal">${nt}</td><td style="text-align:left"><span class="arrow">-></span> ${htmlRhs}</td></tr>`;
+  });
+}
+
+function renderTraceTable(result, order) {
+  const tbody = document.querySelector(`#traceTable tbody`);
+  const errorContainer = document.getElementById('errorContainer');
+  const table = document.getElementById('traceTable');
+
+  if (result.error) {
+    errorContainer.innerHTML = `<div class="error-msg"><strong>Error:</strong> ${result.error}</div>`;
+    errorContainer.classList.remove('hidden');
+    table.classList.add('hidden');
+    return;
+  }
+
+  errorContainer.classList.add('hidden');
+  table.classList.remove('hidden');
+  tbody.innerHTML = "";
+
+  result.steps.forEach((step, index) => {
+    let actionHtml = step.action;
+    if (actionHtml === "Shift") {
+      actionHtml = `<span style="color: var(--green); font-weight: bold;">Shift</span>`;
+    } else if (actionHtml.startsWith("Reduce")) {
+      // Format the reduction string
+      let parts = actionHtml.replace("Reduce ", "").split(" -> ");
+      let nt = formatToken(parts[0], order);
+      let rhs = formatStream(parts[1], order);
+      actionHtml = `<span style="color: var(--accent2); font-weight: bold;">Reduce</span> <span style="font-size:12px">${nt} <span class="arrow">-></span> ${rhs}</span>`;
+    } else if (actionHtml === "Accept") {
+      actionHtml = `<span style="color: var(--yellow); font-weight: bold;">Accept</span>`;
+    } else if (actionHtml === "Start") {
+      actionHtml = `<span style="color: var(--muted);">Initialization</span>`;
+    }
+
+    tbody.innerHTML += `
+      <tr>
+        <td style="color:var(--muted)">${index}</td>
+        <td>${formatStream(step.stack, order)}</td>
+        <td style="text-align:right; letter-spacing: 1px;">${formatStream(step.input, order)}</td>
+        <td>${actionHtml}</td>
+      </tr>
+    `;
+  });
+}
+
+function simulateParse() {
+  const grammarText = document.getElementById('grammarInput').value;
+  const inputStr = document.getElementById('inputString').value;
+  
+  const parsed = parseGrammar(grammarText);
+  renderGrammarTable(parsed);
+
+  const result = findShiftReduceSequence(parsed, inputStr);
+  renderTraceTable(result, parsed.order);
+  
+  // Switch to primary tab
+  document.querySelectorAll('.tab')[0].click();
+}
+
+function switchTab(tabId, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('panel-trace-table').classList.toggle('hidden', tabId !== 'trace-table');
+  document.getElementById('panel-parsed-grammar').classList.toggle('hidden', tabId !== 'parsed-grammar');
+}
+
+// Pre-load default and execute
+simulateParse();
+
+</script>
+</body>
+</html>
