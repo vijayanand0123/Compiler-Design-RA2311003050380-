@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Grammar Optimizer — Left Recursion & Factoring</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0d0f14;--card:#13161e;--card2:#1a1d27;--border:#252836;
+  --accent:#00d4ff;--accent2:#70e1ff;--text:#e8eaf0;--muted:#6b7280;
+  --green:#22c55e;--purple:#a78bfa;--orange:#fb923c;--pink:#f472b6;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);
+  padding:20px;line-height:1.6;
+}
+.page{max-width:1100px;margin:0 auto;}
+header{text-align:center;margin-bottom:30px;}
+h1{font-family:'Syne',sans-serif;font-size:32px;background:linear-gradient(135deg,#fff,var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.pill{display:inline-block;padding:4px 12px;background:rgba(0,212,255,0.1);border:1px solid var(--accent);color:var(--accent2);border-radius:999px;font-size:11px;font-weight:800;text-transform:uppercase;margin-bottom:10px;}
+
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+@media(max-width:850px){.grid{grid-template-columns:1fr;}}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,0.3);}
+.card-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:15px;letter-spacing:1px;}
+
+textarea{
+  width:100%;height:180px;padding:15px;background:#0a0c12;border:1px solid var(--border);
+  color:var(--accent2);font-family:'JetBrains Mono',monospace;font-size:15px;border-radius:10px;outline:none;resize:vertical;
+}
+textarea:focus{border-color:var(--accent);}
+
+.btn{
+  background:var(--accent);color:#0d0f14;border:none;padding:12px 24px;
+  border-radius:8px;font-weight:700;cursor:pointer;margin-top:15px;width:100%;transition:0.2s;
+}
+.btn:hover{filter:brightness(1.2);transform:translateY(-2px);}
+
+.tab-nav{display:flex;gap:10px;margin-bottom:15px;border-bottom:1px solid var(--border);padding-bottom:10px;overflow-x:auto;}
+.tab{cursor:pointer;font-size:13px;font-weight:600;color:var(--muted);padding:5px 10px;border-radius:5px;white-space:nowrap;}
+.tab.active{color:var(--accent2);background:rgba(0,212,255,0.1);}
+
+.output-area{background:#0a0c12;border-radius:10px;padding:15px;min-height:350px;max-height:500px;overflow:auto;}
+table{width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:14px;}
+th,td{padding:12px 10px;border-bottom:1px solid var(--border);text-align:left; vertical-align: top;}
+th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:1px;}
+.non-terminal{color:var(--pink);font-weight:bold;}
+.terminal{color:var(--green);}
+.arrow{color:var(--muted);margin:0 8px;}
+.epsilon{color:var(--purple);font-style:italic;}
+
+.hidden{display:none;}
+.notice{font-size:12px;color:var(--orange);background:rgba(251,146,60,0.1);padding:10px;border-radius:6px;border-left:3px solid var(--orange);margin-top:15px;line-height:1.4;}
+
+footer{margin-top:40px;text-align:center;font-size:12px;color:var(--muted);border-top:1px solid var(--border);padding-top:20px;}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header>
+    <div class="pill">Compiler Design</div>
+    <h1>Grammar Optimizer</h1>
+    <p style="color:var(--muted)">Prepares Context-Free Grammars for Top-Down LL(1) Parsing.</p>
+  </header>
+
+  <div class="grid">
+    <div class="card">
+      <div class="card-title">Input Grammar</div>
+      <textarea id="grammarInput" placeholder="E -> E + T | T&#10;T -> T * F | F&#10;F -> ( E ) | id"></textarea>
+      <button class="btn" onclick="optimizeGrammar()">Optimize Grammar</button>
+      
+      <div class="notice">
+        <strong>Note on Ambiguity:</strong> True ambiguity elimination is mathematically undecidable for arbitrary CFGs. This tool applies <b>Left Recursion Elimination</b> and <b>Left Factoring</b>, which are the standard algorithmic steps to resolve parsing conflicts and prepare grammars for LL(1) predictive parsers.
+      </div>
+
+      <div style="margin-top:25px;">
+        <div class="card-title">Syntax Rules</div>
+        <ul style="font-size:13px; color:var(--muted); padding-left:20px;">
+          <li>Use <b style="color:var(--text)">-></b> to separate LHS and RHS.</li>
+          <li>Use <b style="color:var(--text)">|</b> to separate multiple productions.</li>
+          <li>Separate all tokens (terminals and non-terminals) with <b>spaces</b> (e.g., <b style="color:var(--text)">E + T</b>).</li>
+          <li>Use <b style="color:var(--text)">e</b> or <b style="color:var(--text)">eps</b> or <b style="color:var(--text)">ε</b> for Epsilon.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="tab-nav">
+        <div class="tab active" onclick="switchTab('parsed-table', this)">1. Parsed Input</div>
+        <div class="tab" onclick="switchTab('left-rec-table', this)">2. Left Recursion Removed</div>
+        <div class="tab" onclick="switchTab('left-fac-table', this)">3. Left Factored (Final)</div>
+      </div>
+
+      <div id="panel-parsed-table" class="output-area">
+        <table id="parsedTable">
+          <thead><tr><th width="30%">Non-Terminal</th><th>Productions</th></tr></thead>
+          <tbody>
+            <tr><td colspan="2" style="text-align:center; color:var(--muted); padding:40px;">Enter grammar and click Optimize.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div id="panel-left-rec-table" class="output-area hidden">
+        <table id="leftRecTable">
+          <thead><tr><th width="30%">Non-Terminal</th><th>Productions</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div id="panel-left-fac-table" class="output-area hidden">
+        <table id="leftFacTable">
+          <thead><tr><th width="30%">Non-Terminal</th><th>Productions</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <div>Developed for <strong>Syntax Analysis & Top-Down Parsing</strong></div>
+  </footer>
+</div>
+
+<script>
+/* ── GRAMMAR DATA STRUCTURES ── */
+// Grammar format: { "E": [ ["E", "+", "T"], ["T"] ], ... }
+const EPSILON = "ε";
+
+function parseInput(text) {
+  let lines = text.split('\n');
+  let grammar = {};
+  let order = [];
+
+  lines.forEach(line => {
+    line = line.trim();
+    if (!line) return;
+    
+    // Support '->' or '→'
+    let parts = line.split(/\s*(?:->|→)\s*/);
+    if (parts.length !== 2) return;
+
+    let lhs = parts[0].trim();
+    if (!grammar[lhs]) {
+      grammar[lhs] = [];
+      order.push(lhs);
+    }
+
+    let rhsStrings = parts[1].split(/\s*\|\s*/);
+    rhsStrings.forEach(rhs => {
+      let tokens = rhs.trim().split(/\s+/).map(t => (t === 'e' || t === 'eps') ? EPSILON : t);
+      grammar[lhs].push(tokens);
+    });
+  });
+
+  return { grammar, order };
+}
+
+/* ── ALGORITHM 1: ELIMINATE DIRECT LEFT RECURSION ── */
+function eliminateLeftRecursion(grammar, order) {
+  let newGrammar = {};
+  let newOrder = [];
+
+  order.forEach(nt => {
+    newOrder.push(nt);
+    let alphas = [];
+    let betas = [];
+
+    grammar[nt].forEach(prod => {
+      if (prod[0] === nt) {
+        // A -> A alpha
+        alphas.push(prod.slice(1));
+      } else {
+        // A -> beta
+        betas.push(prod);
+      }
+    });
+
+    if (alphas.length > 0) {
+      let newNt = nt + "'";
+      newOrder.push(newNt);
+      newGrammar[nt] = [];
+      newGrammar[newNt] = [];
+
+      if (betas.length === 0) betas.push([EPSILON]); // Fallback if no beta exists
+
+      betas.forEach(beta => {
+        if (beta[0] === EPSILON) newGrammar[nt].push([newNt]);
+        else newGrammar[nt].push([...beta, newNt]);
+      });
+
+      alphas.forEach(alpha => {
+        newGrammar[newNt].push([...alpha, newNt]);
+      });
+      newGrammar[newNt].push([EPSILON]); // Add epsilon to A'
+    } else {
+      newGrammar[nt] = grammar[nt];
+    }
+  });
+
+  return { grammar: newGrammar, order: newOrder };
+}
+
+/* ── ALGORITHM 2: LEFT FACTORING ── */
+function leftFactor(grammar, order) {
+  let newGrammar = {};
+  let newOrder = [...order];
+
+  let changed = true;
+  while(changed) {
+    changed = false;
+    let tempGrammar = {};
+    let tempOrder = [];
+
+    for (let i = 0; i < newOrder.length; i++) {
+      let nt = newOrder[i];
+      tempOrder.push(nt);
+      
+      let productions = newGrammar[nt] || grammar[nt];
+      let prefixGroups = {};
+
+      // Group by first token
+      productions.forEach(prod => {
+        let firstToken = prod[0];
+        if (!prefixGroups[firstToken]) prefixGroups[firstToken] = [];
+        prefixGroups[firstToken].push(prod);
+      });
+
+      let newProductionsForNt = [];
+
+      Object.keys(prefixGroups).forEach(firstToken => {
+        let group = prefixGroups[firstToken];
+        
+        if (group.length > 1) {
+          // Left Factoring Needed
+          changed = true;
+          let newNt = nt + "''"; // Generate new state
+          while(newOrder.includes(newNt) || tempOrder.includes(newNt)) newNt += "'";
+          tempOrder.push(newNt);
+
+          let remainderProds = [];
+          group.forEach(prod => {
+            let remainder = prod.slice(1);
+            if (remainder.length === 0) remainder = [EPSILON];
+            remainderProds.push(remainder);
+          });
+
+          newProductionsForNt.push([firstToken, newNt]);
+          tempGrammar[newNt] = remainderProds;
+        } else {
+          newProductionsForNt.push(group[0]);
+        }
+      });
+
+      tempGrammar[nt] = newProductionsForNt;
+    }
+
+    newGrammar = tempGrammar;
+    newOrder = tempOrder;
+  }
+
+  return { grammar: newGrammar, order: newOrder };
+}
+
+/* ── UI RENDERERS ── */
+
+function formatToken(t, allNTs) {
+  if (t === EPSILON) return `<span class="epsilon">${t}</span>`;
+  if (allNTs.includes(t)) return `<span class="non-terminal">${t}</span>`;
+  return `<span class="terminal">${t}</span>`;
+}
+
+function renderTable(tableId, grammarObj) {
+  const tbody = document.querySelector(`#${tableId} tbody`);
+  tbody.innerHTML = "";
+  
+  if(grammarObj.order.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="2" style="text-align:center; color:var(--muted); padding:40px;">No valid grammar found.</td></tr>`;
+    return;
+  }
+
+  grammarObj.order.forEach(nt => {
+    let prods = grammarObj.grammar[nt];
+    if(!prods) return;
+    
+    let htmlRhs = prods.map(prod => {
+      return prod.map(token => formatToken(token, grammarObj.order)).join(" ");
+    }).join(` <span style="color:var(--muted); margin: 0 10px;">|</span> `);
+
+    tbody.innerHTML += `
+      <tr>
+        <td class="non-terminal" style="font-size:16px;">${nt}</td>
+        <td style="font-size:16px;"><span class="arrow">-></span> ${htmlRhs}</td>
+      </tr>
+    `;
+  });
+}
+
+function convert() {
+  const text = document.getElementById('grammarInput').value;
+  
+  // Step 1: Parse
+  const parsed = parseInput(text);
+  renderTable('parsedTable', parsed);
+
+  // Step 2: Left Recursion
+  const leftRecEliminated = eliminateLeftRecursion(parsed.grammar, parsed.order);
+  renderTable('leftRecTable', leftRecEliminated);
+
+  // Step 3: Left Factoring
+  const fullyOptimized = leftFactor(leftRecEliminated.grammar, leftRecEliminated.order);
+  renderTable('leftFacTable', fullyOptimized);
+  
+  // Jump to final tab
+  document.querySelectorAll('.tab')[2].click();
+}
+
+// Map the generic HTML button function to our specific one
+window.optimizeGrammar = convert;
+
+function switchTab(tabId, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('panel-parsed-table').classList.toggle('hidden', tabId !== 'parsed-table');
+  document.getElementById('panel-left-rec-table').classList.toggle('hidden', tabId !== 'left-rec-table');
+  document.getElementById('panel-left-fac-table').classList.toggle('hidden', tabId !== 'left-fac-table');
+}
+
+// Pre-load default
+document.getElementById('grammarInput').value = 
+`S -> i E t S | i E t S e S | a
+E -> E + T | T
+T -> T * F | F
+F -> ( E ) | id`;
+convert();
+
+</script>
+</body>
+</html>
